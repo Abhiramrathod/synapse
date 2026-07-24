@@ -1,0 +1,11 @@
+# JitPack configuration
+# https://jitpack.io/docs
+
+jdk:
+  - openjdk25
+
+install:
+  - mvn clean install -DskipTests -q
+
+env:
+  MAVEN_OPTS: "-Xmx512m"
