@@ -372,7 +372,7 @@ Single dependency for all Synapse modules:
 <dependency>
     <groupId>com.github.Abhiramrathod</groupId>
     <artifactId>synapse-all</artifactId>
-    <version> Tag</version>
+    <version>v1.0.4</version>
 </dependency>
 ```
 
@@ -391,7 +391,7 @@ Single dependency with auto-configuration:
 <dependency>
     <groupId>com.github.Abhiramrathod</groupId>
     <artifactId>synapse-spring-boot-starter</artifactId>
-    <version> Tag</version>
+    <version>v1.0.4</version>
 </dependency>
 ```
 
@@ -940,7 +940,7 @@ After tag is created, JitPack builds automatically. Use in your project:
 <dependency>
     <groupId>com.github.Abhiramrathod</groupId>
     <artifactId>synapse-all</artifactId>
-    <version>TAG</version>
+    <version>v1.0.4</version>
 </dependency>
 ```
 
