@@ -81,6 +81,17 @@ jobs:
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
 
+      - name: Update README with latest version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          VERSION="${{ steps.version.outputs.new_version }}"
+          sed -i "s|<version> Tag</version>|<version>${VERSION}</version>|g" README.md
+          sed -i "s|<version>TAG</version>|<version>${VERSION}</version>|g" README.md
+          git add README.md
+          git diff --cached --quiet || git commit -m "docs: update version to ${VERSION} in README"
+          git push
+
       - name: Create and push tag
         run: |
           git config user.name "github-actions[bot]"
