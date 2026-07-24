@@ -1,5 +1,6 @@
 # Synapse
 
+[![Latest Version](https://img.shields.io/github/v/release/Abhiramrathod/synapse?label=latest%20version)](https://github.com/Abhiramrathod/synapse/releases/latest)
 [![](https://jitpack.io/v/Abhiramrathod/synapse.svg)](https://jitpack.io/#Abhiramrathod/synapse)
 
 A production-ready, multi-module Java library for seamless integration with any LLM API provider.
