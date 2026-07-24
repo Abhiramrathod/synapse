@@ -94,4 +94,4 @@ jobs:
           echo "Version: **${{ steps.version.outputs.new_version }}**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "JitPack will build this automatically." >> $GITHUB_STEP_SUMMARY
-          echo "Use: \`com.github.abhiram-conure:synapse-all:${{ steps.version.outputs.new_version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Use: \`com.github.Abhiramrathod:synapse-all:${{ steps.version.outputs.new_version }}\`" >> $GITHUB_STEP_SUMMARY
