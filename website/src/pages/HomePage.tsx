@@ -14,31 +14,14 @@ export default function HomePage() {
   const [activeModule, setActiveModule] = useState<string | null>(null)
 
   return (
-    <div className="bg-gray-950 min-h-screen">
+    <div className="min-h-screen">
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-32 pb-20">
-        {/* Background gradient mesh */}
+        {/* Background gradient mesh - neural themed */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-synapse-600/20 rounded-full blur-[128px]" />
-          <div className="absolute top-20 -left-20 w-[400px] h-[400px] bg-purple-600/15 rounded-full blur-[100px]" />
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-synapse-500/10 rounded-full blur-[120px]" />
-          {/* Grid pattern */}
-          <div
-            className="absolute inset-0 opacity-[0.03]"
-            style={{
-              backgroundImage:
-                'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-              backgroundSize: '64px 64px',
-            }}
-          />
-          {/* Dot pattern */}
-          <div
-            className="absolute inset-0 opacity-[0.04]"
-            style={{
-              backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.5) 1px, transparent 1px)',
-              backgroundSize: '32px 32px',
-            }}
-          />
+          <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-neon-green/5 rounded-full blur-[128px]" />
+          <div className="absolute top-20 -left-20 w-[400px] h-[400px] bg-synapse-600/10 rounded-full blur-[100px]" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-neon-blue/5 rounded-full blur-[120px]" />
         </div>
 
         <div className="max-w-7xl mx-auto px-6 relative">
@@ -127,7 +110,7 @@ export default function HomePage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {features.map((feature, i) => (
               <FadeIn key={feature.title} delay={i * 0.07}>
-                <div className="group p-6 rounded-2xl bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 hover:border-gray-700/60 transition-all hover:-translate-y-1 h-full">
+                <div className="group p-6 rounded-2xl glass-card hover:border-gray-700/60 transition-all hover:-translate-y-1 h-full">
                   <div className={`w-10 h-10 rounded-xl ${feature.bgColor} ${feature.borderColor} border flex items-center justify-center mb-4`}>
                     <feature.icon className={`w-5 h-5 ${feature.color}`} />
                   </div>
@@ -166,7 +149,7 @@ export default function HomePage() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: i * 0.08 }}
-                    className="relative p-5 rounded-2xl bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 hover:border-gray-700/60 transition-all"
+                    className="relative p-5 rounded-2xl glass-card hover:border-gray-700/60 transition-all"
                   >
                     <div className="flex items-start gap-3 mb-3">
                       <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${mod.color} flex items-center justify-center flex-shrink-0`}>
@@ -281,8 +264,8 @@ export default function HomePage() {
                   whileTap={{ scale: 0.98 }}
                   className={`p-6 rounded-2xl border cursor-pointer transition-all ${
                     activeModule === mod.name
-                      ? 'bg-gray-800/80 border-synapse-500/40 shadow-lg shadow-synapse-500/10'
-                      : 'bg-gray-900/60 border-gray-800/50 hover:border-gray-700/60'
+                      ? 'bg-gray-800/60 border-neon-green/30 shadow-lg shadow-neon-green/5'
+                      : 'glass-card hover:border-gray-700/60'
                   }`}
                 >
                   <div className="flex items-center gap-3 mb-4">
@@ -358,7 +341,7 @@ export default function HomePage() {
           <FadeIn>
             <div className="relative p-12 lg:p-16 rounded-3xl overflow-hidden">
               {/* Gradient background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-synapse-600/20 via-gray-900 to-purple-600/20" />
+              <div className="absolute inset-0 bg-gradient-to-br from-neon-green/5 via-gray-900 to-synapse-600/10" />
               <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" />
               <div className="absolute inset-0 border border-gray-700/30 rounded-3xl" />
 

@@ -395,7 +395,7 @@ export default function GettingStartedPage() {
       <section className="py-20">
         <div className="max-w-5xl mx-auto px-6">
           <FadeIn>
-            <div className="bg-gradient-to-br from-synapse-600/10 via-gray-900/60 to-purple-600/10 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-8 md:p-12 text-center">
+            <div className="bg-gradient-to-br from-neon-green/5 via-gray-900/60 to-synapse-600/5 backdrop-blur-xl border border-gray-800/40 rounded-2xl p-8 md:p-12 text-center">
               <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
                 Ready to dive deeper?
               </h2>

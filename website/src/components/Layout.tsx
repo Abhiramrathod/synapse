@@ -2,6 +2,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { Menu, X, Github, ExternalLink } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import NeuralNetworkBg from './NeuralNetworkBg'
 
 const navItems = [
   { path: '/', label: 'Home' },
@@ -25,7 +26,8 @@ export default function Layout() {
   }, [location])
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-950 relative">
+      <NeuralNetworkBg />
       {/* Navbar */}
       <nav className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${scrolled ? 'glass shadow-lg shadow-black/20' : 'bg-transparent'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -121,7 +123,7 @@ export default function Layout() {
       </nav>
 
       {/* Main content */}
-      <main className="pt-16">
+      <main className="pt-16 relative" style={{ zIndex: 1 }}>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}

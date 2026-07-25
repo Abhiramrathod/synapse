@@ -180,7 +180,7 @@ System.out.println(response.getContent());`,
                   The main entry point for interacting with LLM APIs. Provides synchronous and streaming methods for sending prompts and receiving responses.
                 </p>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 overflow-hidden">
+                <div className="glass-card rounded-xl overflow-hidden">
                   <div className="p-4 border-b border-gray-800/50">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
@@ -239,7 +239,7 @@ System.out.println(response.getContent());`,
                   The concrete implementation of <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">ISynapseHub</code>. Handles HTTP communication, retry logic, and interceptor orchestration.
                 </p>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 p-6 mb-6">
+                <div className="glass-card p-6 mb-6">
                   <div className="space-y-4">
                     <div className="flex items-start gap-3">
                       <Info className="w-5 h-5 text-synapse-400 mt-0.5 flex-shrink-0" />
@@ -277,7 +277,7 @@ System.out.println(response.getContent());`,
                   Configuration holder using the Builder pattern. All required fields must be set before calling <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">.build()</code>.
                 </p>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 overflow-hidden mb-6">
+                <div className="glass-card overflow-hidden mb-6">
                   <div className="p-4 border-b border-gray-800/50">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
@@ -322,7 +322,7 @@ System.out.println(response.getContent());`,
                   Immutable message model for multi-turn conversations. Use factory methods to create messages with different roles.
                 </p>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 overflow-hidden mb-6">
+                <div className="glass-card overflow-hidden mb-6">
                   <div className="p-4 border-b border-gray-800/50">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
@@ -362,7 +362,7 @@ System.out.println(response.getContent());`,
                   Immutable response model containing the LLM output, token usage, and metadata.
                 </p>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 overflow-hidden mb-6">
+                <div className="glass-card overflow-hidden mb-6">
                   <div className="p-4 border-b border-gray-800/50">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
@@ -404,7 +404,7 @@ System.out.println(response.getContent());`,
                   Structured exception hierarchy with typed error categories. Each exception carries a type and retryability flag.
                 </p>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 overflow-hidden mb-6">
+                <div className="glass-card overflow-hidden mb-6">
                   <div className="p-4 border-b border-gray-800/50">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
@@ -435,7 +435,7 @@ System.out.println(response.getContent());`,
                   </table>
                 </div>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 p-6 mb-6">
+                <div className="glass-card p-6 mb-6">
                   <h4 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
                     <Info className="w-4 h-4 text-synapse-400" />
                     isRetryable() Method
@@ -467,7 +467,7 @@ System.out.println(response.getContent());`,
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 p-6">
+                  <div className="glass-card p-6">
                     <h4 className="text-sm font-semibold text-white mb-3">SynapseRequestInterceptor</h4>
                     <ul className="space-y-2 text-sm text-gray-400">
                       <li className="flex items-start gap-2">
@@ -484,7 +484,7 @@ System.out.println(response.getContent());`,
                       </li>
                     </ul>
                   </div>
-                  <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 p-6">
+                  <div className="glass-card p-6">
                     <h4 className="text-sm font-semibold text-white mb-3">SynapseResponseInterceptor</h4>
                     <ul className="space-y-2 text-sm text-gray-400">
                       <li className="flex items-start gap-2">
@@ -517,7 +517,7 @@ System.out.println(response.getContent());`,
                   Customizable retry logic interface. Implement to control when and how failed requests are retried.
                 </p>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 overflow-hidden mb-6">
+                <div className="glass-card overflow-hidden mb-6">
                   <div className="p-4 border-b border-gray-800/50">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
@@ -557,7 +557,7 @@ System.out.println(response.getContent());`,
                   Listener interface for tracking request metrics, latency, and token usage. Implement to integrate with your monitoring system.
                 </p>
 
-                <div className="bg-gray-900/60 rounded-xl border border-gray-800/50 overflow-hidden mb-6">
+                <div className="glass-card overflow-hidden mb-6">
                   <div className="p-4 border-b border-gray-800/50">
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
