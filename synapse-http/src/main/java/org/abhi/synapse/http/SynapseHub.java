@@ -4,6 +4,7 @@ import org.abhi.synapse.config.SynapseConfig;
 import org.abhi.synapse.core.ISynapseHub;
 import org.abhi.synapse.core.exception.SynapseException;
 import org.abhi.synapse.core.model.ChatMessage;
+import org.abhi.synapse.core.model.Model;
 import org.abhi.synapse.core.model.SynapseRequestContext;
 import org.abhi.synapse.core.model.SynapseResponse;
 import org.abhi.synapse.core.model.SynapseResponseContext;
@@ -12,6 +13,7 @@ import org.abhi.synapse.interceptors.SynapseResponseInterceptor;
 import org.abhi.synapse.metrics.SynapseMetrics;
 import org.abhi.synapse.metrics.SynapseMetricsCollector;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.net.http.HttpClient;
@@ -70,6 +72,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private final SynapseRetryHandler retryHandler;
     private final SynapseMetricsCollector metricsCollector;
     private final SynapseMetrics metrics;
+    private final ObjectMapper objectMapper;
     private volatile boolean closed = false;
 
     /**
@@ -101,6 +104,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
      */
     public SynapseHub(SynapseConfig config, ObjectMapper objectMapper) {
         this.config = config;
+        this.objectMapper = objectMapper;
         this.metrics = new SynapseMetrics();
         this.requestBuilder = new SynapseRequestBuilder(config, objectMapper);
         this.responseParser = new SynapseResponseParser(objectMapper);
@@ -262,7 +266,6 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
 
         Map<String, String> headers = new HashMap<>();
         headers.put("Content-Type", "application/json");
-        headers.put("Authorization", "Bearer " + config.getApiKey());
 
         SynapseRequestContext requestContext = new SynapseRequestContext(url, requestBody, headers,
                 true, config.getModelName());
@@ -272,7 +275,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             requestInterceptor.beforeRequest(requestContext);
         }
 
-        HttpRequest request = requestBuilder.buildRequest(
+        HttpRequest request = requestBuilder.buildPostRequest(
                 requestContext.getUrl(), requestContext.getBody());
 
         log(Level.FINE, "Streaming request to: " + url);
@@ -299,6 +302,50 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         }
     }
 
+    @Override
+    public List<Model> getModelsList() throws SynapseException {
+        checkNotClosed();
+
+        String baseUrl = config.getBaseUrl().replaceAll("/+$", "") + "/models";
+
+        log(Level.FINE, "Fetching models list from: " + baseUrl);
+        long startTime = System.currentTimeMillis();
+
+        HttpRequest request = requestBuilder.buildGetRequest(baseUrl);
+        HttpResponse<String> response = httpClient.send(request);
+
+        long latencyMs = System.currentTimeMillis() - startTime;
+        log(Level.FINE, "Models list fetched in " + latencyMs + "ms with status " + response.statusCode());
+
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            metricsCollector.recordFailure(startTime);
+            throw new SynapseException(response.statusCode(), response.body());
+        }
+
+        metricsCollector.recordSuccess(startTime);
+        return parseModels(response.body());
+    }
+
+
+    private List<Model> parseModels(String responseBody) throws SynapseException {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode data = root.path("data");
+            List<Model> models = new java.util.ArrayList<>();
+            for (JsonNode node : data) {
+                Model model = new Model();
+                model.setId(node.path("id").asText(null));
+                model.setObject(node.path("object").asText(null));
+                model.setCreated(node.path("created").asLong(0));
+                model.setOwnedBy(node.path("owned_by").asText(null));
+                models.add(model);
+            }
+            return models;
+        } catch (Exception e) {
+            throw new SynapseException("Failed to parse models response", e,
+                    SynapseException.ExceptionType.PARSE_ERROR);
+        }
+    }
     /**
      * Executes the given request body through the retry handler with the specified streaming mode.
      *
@@ -332,7 +379,6 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
 
         Map<String, String> headers = new HashMap<>();
         headers.put("Content-Type", "application/json");
-        headers.put("Authorization", "Bearer " + config.getApiKey());
 
         SynapseRequestContext requestContext = new SynapseRequestContext(url, requestBody, headers,
                 streaming, config.getModelName());
@@ -342,7 +388,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             requestInterceptor.beforeRequest(requestContext);
         }
 
-        HttpRequest request = requestBuilder.buildRequest(
+        HttpRequest request = requestBuilder.buildPostRequest(
                 requestContext.getUrl(), requestContext.getBody());
 
         log(Level.FINE, "Request to: " + url);

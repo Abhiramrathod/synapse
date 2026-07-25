@@ -131,13 +131,24 @@ class SynapseRequestBuilder {
      * @return the constructed {@link HttpRequest}; never {@code null}
      * @since 1.0.0
      */
-    HttpRequest buildRequest(String url, String body) {
+    HttpRequest buildPostRequest(String url, String body) {
         return HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + config.getApiKey())
                 .timeout(config.getRequestTimeout())
                 .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+    }
+
+
+    HttpRequest buildGetRequest(String url) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + config.getApiKey())
+                .timeout(config.getRequestTimeout())
+                .GET()
                 .build();
     }
 }

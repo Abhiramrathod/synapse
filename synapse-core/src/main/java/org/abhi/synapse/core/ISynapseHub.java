@@ -1,6 +1,7 @@
 package org.abhi.synapse.core;
 
 import org.abhi.synapse.core.model.ChatMessage;
+import org.abhi.synapse.core.model.Model;
 import org.abhi.synapse.core.model.SynapseResponse;
 import org.abhi.synapse.core.exception.SynapseException;
 
@@ -146,6 +147,9 @@ public interface ISynapseHub {
      * @since 1.0.0
      */
     void streamCompletion(String requestBody, Consumer<String> onChunk) throws SynapseException;
+
+
+    List<Model> getModelsList();
 
     /**
      * Releases any resources held by this hub, including HTTP connections and threads.
