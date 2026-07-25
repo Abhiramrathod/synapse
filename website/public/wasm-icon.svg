@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <defs>
+    <linearGradient id="neonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ff88;stop-opacity:0.15" />
+      <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:0.15" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" fill="url(#neonGrad)" rx="16"/>
+  <!-- Hex grid pattern -->
+  <g opacity="0.3" stroke="#00ff88" stroke-width="0.5" fill="none">
+    <polygon points="60,30 80,20 100,30 100,50 80,60 60,50"/>
+    <polygon points="100,30 120,20 140,30 140,50 120,60 100,50"/>
+    <polygon points="60,50 80,40 100,50 100,70 80,80 60,70"/>
+    <polygon points="100,50 120,40 140,50 140,70 120,80 100,70"/>
+    <polygon points="60,70 80,60 100,70 100,90 80,100 60,90"/>
+    <polygon points="100,70 120,60 140,70 140,90 120,100 100,90"/>
+    <polygon points="60,90 80,80 100,90 100,110 80,120 60,110"/>
+    <polygon points="100,90 120,80 140,90 140,110 120,120 100,110"/>
+    <polygon points="60,110 80,100 100,110 100,130 80,140 60,130"/>
+    <polygon points="100,110 120,100 140,110 140,130 120,140 100,130"/>
+    <polygon points="60,130 80,120 100,130 100,150 80,160 60,150"/>
+    <polygon points="100,130 120,120 140,130 140,150 120,160 100,150"/>
+  </g>
+  <!-- Java coffee cup -->
+  <g transform="translate(85,75) scale(1.2)">
+    <path d="M10,20 Q10,50 25,55 L45,55 Q60,50 60,20 L55,15 Q55,5 40,5 L30,5 Q15,5 15,15 Z" fill="#5c7cfa" opacity="0.6"/>
+    <ellipse cx="35" cy="18" rx="18" ry="6" fill="#4263eb" opacity="0.8"/>
+    <path d="M58,22 Q75,22 75,35 Q75,48 58,48" stroke="#5c7cfa" stroke-width="3" fill="none" opacity="0.5"/>
+    <!-- Steam -->
+    <path d="M28,0 Q25,-8 30,-12" stroke="#00ff88" stroke-width="1.5" fill="none" opacity="0.5"/>
+    <path d="M38,-2 Q35,-10 40,-14" stroke="#00d4ff" stroke-width="1.5" fill="none" opacity="0.5"/>
+  </g>
+  <!-- WASM badge -->
+  <rect x="60" y="150" width="80" height="28" rx="14" fill="#5c7cfa" opacity="0.8"/>
+  <text x="100" y="169" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="700" font-size="13" fill="#fff">WebAssembly</text>
+</svg>

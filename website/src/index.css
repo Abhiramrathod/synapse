@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #4263eb #1e293b;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #1e293b;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #4263eb;
+    border-radius: 3px;
+  }
+
+  ::selection {
+    background: rgba(92, 124, 250, 0.3);
+    color: #fff;
+  }
+}
+
+@layer components {
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-synapse-400 via-neon-purple to-neon-blue;
+  }
+
+  .gradient-border {
+    position: relative;
+    background: linear-gradient(135deg, rgba(66, 99, 235, 0.1), rgba(124, 58, 237, 0.1));
+    border: 1px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(92, 124, 250, 0.5), rgba(124, 58, 237, 0.5), rgba(0, 212, 255, 0.5));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .glass {
+    @apply bg-gray-900/60 backdrop-blur-xl border border-gray-800/50;
+  }
+
+  .code-block {
+    @apply bg-gray-900/80 border border-gray-800/50 rounded-xl overflow-hidden;
+  }
+
+  .code-block pre {
+    @apply p-5 text-sm leading-relaxed;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  .code-block code {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  .neon-glow {
+    box-shadow: 0 0 15px rgba(92, 124, 250, 0.3), 0 0 45px rgba(92, 124, 250, 0.1);
+  }
+
+  .neon-glow-green {
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.3), 0 0 45px rgba(0, 255, 136, 0.1);
+  }
+
+  .section-heading {
+    @apply text-3xl md:text-4xl font-bold tracking-tight;
+  }
+
+  .section-subheading {
+    @apply text-lg text-gray-400 mt-4 max-w-2xl;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-feature-settings: 'cv11', 'ss01';
+}
