@@ -37,6 +37,11 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: website
+        env:
+          GITHUB_ACTIONS: 'true'
+
+      - name: Copy 404.html for SPA routing
+        run: cp website/dist/index.html website/dist/404.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
