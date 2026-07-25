@@ -5,6 +5,7 @@ import { ArrowRight, Github, ChevronRight } from 'lucide-react'
 import FadeIn from '../components/FadeIn'
 import CodeBlock from '../components/CodeBlock'
 import Badge from '../components/Badge'
+import WasmDemo from '../components/WasmDemo'
 import { features, modules } from '../data/content'
 import { quickStartCode, streamingCode } from '../data/codeExamples'
 
@@ -331,6 +332,23 @@ export default function HomePage() {
               </FadeIn>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* WebAssembly Demo */}
+      <section className="py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          <FadeIn>
+            <div className="text-center mb-12">
+              <h2 className="text-4xl font-bold text-white">Run Anywhere — Even the Browser</h2>
+              <p className="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+                Java compiled to WebAssembly runs natively in the browser. Try it below.
+              </p>
+            </div>
+          </FadeIn>
+          <FadeIn delay={0.1}>
+            <WasmDemo />
+          </FadeIn>
         </div>
       </section>
 

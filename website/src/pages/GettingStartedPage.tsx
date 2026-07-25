@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Package, Play, Code2, Wrench, Settings, ArrowRight, CheckCircle2, Copy, Terminal, Check, X } from 'lucide-react'
 import FadeIn from '../components/FadeIn'
@@ -399,25 +400,17 @@ export default function GettingStartedPage() {
                 Ready to dive deeper?
               </h2>
               <p className="text-gray-400 mb-8 max-w-xl mx-auto">
-                Explore the full API reference or learn about advanced deployment with WebAssembly.
+                Explore the full API reference for detailed class documentation.
               </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <a
-                  href="/api"
+              <div className="flex items-center justify-center">
+                <Link
+                  to="/synapse/api"
                   className="inline-flex items-center gap-2 px-6 py-3 bg-synapse-600 hover:bg-synapse-500 text-white rounded-xl font-medium transition-all group"
                 >
                   <Code2 className="w-4 h-4" />
                   API Reference
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </a>
-                <a
-                  href="/webassembly"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gray-800/60 hover:bg-gray-800 text-white border border-gray-700/50 rounded-xl font-medium transition-all group"
-                >
-                  <Package className="w-4 h-4" />
-                  WebAssembly
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </a>
+                </Link>
               </div>
             </div>
           </FadeIn>

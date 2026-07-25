@@ -4,7 +4,6 @@ import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
 import GettingStartedPage from './pages/GettingStartedPage'
 import ApiReferencePage from './pages/ApiReferencePage'
-import WebAssemblyPage from './pages/WebAssemblyPage'
 
 function useBasename(): string {
   return useMemo(() => {
@@ -28,7 +27,6 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route path="getting-started" element={<GettingStartedPage />} />
           <Route path="api" element={<ApiReferencePage />} />
-          <Route path="webassembly" element={<WebAssemblyPage />} />
         </Route>
       </Routes>
     </Router>

@@ -7,7 +7,6 @@ const navItems = [
   { path: '/', label: 'Home' },
   { path: '/getting-started', label: 'Getting Started' },
   { path: '/api', label: 'API Reference' },
-  { path: '/webassembly', label: 'WebAssembly' },
 ]
 
 export default function Layout() {
@@ -155,7 +154,6 @@ export default function Layout() {
               <ul className="space-y-2">
                 <li><Link to="/getting-started" className="text-sm text-gray-400 hover:text-synapse-400 transition-colors">Getting Started</Link></li>
                 <li><Link to="/api" className="text-sm text-gray-400 hover:text-synapse-400 transition-colors">API Reference</Link></li>
-                <li><Link to="/webassembly" className="text-sm text-gray-400 hover:text-synapse-400 transition-colors">WebAssembly</Link></li>
               </ul>
             </div>
             <div>
