@@ -348,7 +348,8 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     public List<Model> getModelsList() throws SynapseException {
         checkNotClosed();
 
-        String baseUrl = config.getBaseUrl().replaceAll("/+$", "") + "/v1/models";
+        String cleanUrl = config.getBaseUrl().replaceAll("/+$", "");
+        String baseUrl = cleanUrl.endsWith("/v1") ? cleanUrl + "/models" : cleanUrl + "/v1/models";
 
         log(Level.FINE, "Fetching models list from: " + baseUrl);
         long startTime = System.currentTimeMillis();
