@@ -149,6 +149,20 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         return sendChat(List.of(ChatMessage.user(prompt)));
     }
 
+    /**
+     * Sends a single prompt to the specified model and returns the complete response.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The prompt is sent as a single user message to the specified model.</p>
+     *
+     * @param prompt    the text prompt to send to the model; must not be {@code null} or empty
+     * @param modelName the model identifier to use, overriding the configured default;
+     *                  must not be {@code null}
+     * @return the {@link SynapseResponse} containing the model's response and usage metadata
+     * @throws SynapseException if the request fails, is retried and exhausted,
+     *                          or if the hub has been closed
+     * @since 1.0.0
+     */
     @Override
     public SynapseResponse sendPrompt(String prompt, String modelName) throws SynapseException {
         checkNotClosed();
@@ -177,6 +191,21 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         return executeWithRetry(jsonBody, false);
     }
 
+    /**
+     * Sends a list of chat messages to the specified model and returns the complete response.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The messages are serialized and sent to the specified model.</p>
+     *
+     * @param messages  the list of {@link ChatMessage} objects representing the conversation;
+     *                  must not be {@code null} or empty
+     * @param modelName the model identifier to use, overriding the configured default;
+     *                  must not be {@code null}
+     * @return the {@link SynapseResponse} containing the model's response and usage metadata
+     * @throws SynapseException if the request fails, is retried and exhausted,
+     *                          or if the hub has been closed
+     * @since 1.0.0
+     */
     @Override
     public SynapseResponse sendChat(List<ChatMessage> messages, String modelName) throws SynapseException {
         checkNotClosed();
@@ -206,6 +235,21 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         return executeWithRetry(requestBody, false);
     }
 
+    /**
+     * Sends a raw JSON request body to the specified model and returns the parsed response.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The model field in the request body is replaced with the specified model name before sending.</p>
+     *
+     * @param requestBody the raw JSON string to send as the request body;
+     *                    must not be {@code null}
+     * @param modelName   the model identifier to use, overriding the configured default;
+     *                    must not be {@code null}
+     * @return the {@link SynapseResponse} containing the model's response and usage metadata
+     * @throws SynapseException if the request fails, is retried and exhausted,
+     *                          or if the hub has been closed
+     * @since 1.0.0
+     */
     @Override
     public SynapseResponse chatCompletion(String requestBody, String modelName) throws SynapseException {
         checkNotClosed();
@@ -234,6 +278,22 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         streamChat(List.of(ChatMessage.user(prompt)), onChunk);
     }
 
+    /**
+     * Sends a single prompt to the specified model and streams the response chunks via the
+     * provided callback.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The prompt is sent as a single user message to the specified model.</p>
+     *
+     * @param prompt    the text prompt to send to the model; must not be {@code null} or empty
+     * @param onChunk   the {@link Consumer} callback that receives each text chunk from the
+     *                  streaming response; must not be {@code null}
+     * @param modelName the model identifier to use, overriding the configured default;
+     *                  must not be {@code null}
+     * @throws SynapseException if the streaming request fails,
+     *                          or if the hub has been closed
+     * @since 1.0.0
+     */
     @Override
     public void streamPrompt(String prompt, Consumer<String> onChunk, String modelName) throws SynapseException {
         checkNotClosed();
@@ -265,6 +325,24 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         streamCompletion(jsonBody, onChunk);
     }
 
+    /**
+     * Sends a list of chat messages to the specified model and streams the response chunks via the
+     * provided callback.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * Each content chunk from the server-side events (SSE) stream is delivered to the
+     * {@code onChunk} callback as it arrives.</p>
+     *
+     * @param messages  the list of {@link ChatMessage} objects representing the conversation;
+     *                  must not be {@code null} or empty
+     * @param onChunk   the {@link Consumer} callback that receives each text chunk from the
+     *                  streaming response; must not be {@code null}
+     * @param modelName the model identifier to use, overriding the configured default;
+     *                  must not be {@code null}
+     * @throws SynapseException if the streaming request fails,
+     *                          or if the hub has been closed
+     * @since 1.0.0
+     */
     @Override
     public void streamChat(List<ChatMessage> messages, Consumer<String> onChunk, String modelName) throws SynapseException {
         checkNotClosed();
@@ -337,6 +415,23 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         }
     }
 
+    /**
+     * Sends a raw JSON request body to the specified model and streams the response chunks
+     * via the provided callback.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The model field in the request body is replaced with the specified model name before sending.</p>
+     *
+     * @param requestBody the raw JSON string to send as the request body;
+     *                    must not be {@code null}
+     * @param onChunk     the {@link Consumer} callback that receives each text chunk from the
+     *                    streaming response; must not be {@code null}
+     * @param modelName   the model identifier to use, overriding the configured default;
+     *                    must not be {@code null}
+     * @throws SynapseException if the streaming request fails,
+     *                          or if the hub has been closed
+     * @since 1.0.0
+     */
     @Override
     public void streamCompletion(String requestBody, Consumer<String> onChunk, String modelName) throws SynapseException {
         checkNotClosed();
@@ -344,6 +439,21 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         streamCompletion(overriddenBody, onChunk);
     }
 
+    /**
+     * Retrieves the list of available models from the LLM API endpoint.
+     *
+     * <p>Sends a GET request to the {@code /v1/models} endpoint (relative to the configured
+     * base URL) and returns the parsed list of {@link Model} objects. The base URL is
+     * automatically adjusted: if it already ends with {@code /v1}, only {@code /models}
+     * is appended; otherwise {@code /v1/models} is appended.</p>
+     *
+     * @return a {@link List} of {@link Model} objects representing available models;
+     *         never {@code null} but may be empty
+     * @throws SynapseException if the request fails, returns a non-2xx status,
+     *                          or if the response cannot be parsed
+     * @since 1.0.0
+     * @see Model
+     */
     @Override
     public List<Model> getModelsList() throws SynapseException {
         checkNotClosed();

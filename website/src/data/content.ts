@@ -76,7 +76,7 @@ export const modules = [
     description: 'Core interfaces, models, and exceptions',
     icon: Code2,
     color: 'from-synapse-500 to-synapse-700',
-    items: ['ISynapseHub', 'ChatMessage', 'SynapseResponse', 'SynapseException'],
+    items: ['ISynapseHub', 'ChatMessage', 'SynapseResponse', 'SynapseException', 'Model'],
   },
   {
     name: 'synapse-interceptors',
@@ -134,15 +134,33 @@ export const apiMethods = [
     module: 'synapse-core',
   },
   {
+    method: 'sendPrompt',
+    signature: 'sendPrompt(String prompt, String modelName) -> SynapseResponse',
+    description: 'Send a text prompt to a specific model, overriding the configured default.',
+    module: 'synapse-core',
+  },
+  {
     method: 'sendChat',
     signature: 'sendChat(List<ChatMessage> messages) -> SynapseResponse',
     description: 'Send a multi-turn conversation and receive a synchronous response.',
     module: 'synapse-core',
   },
   {
+    method: 'sendChat',
+    signature: 'sendChat(List<ChatMessage> messages, String modelName) -> SynapseResponse',
+    description: 'Send a multi-turn conversation to a specific model, overriding the configured default.',
+    module: 'synapse-core',
+  },
+  {
     method: 'chatCompletion',
-    signature: 'chatCompletion(String prompt) -> SynapseResponse',
-    description: 'Convenience method for chat completion with a single prompt.',
+    signature: 'chatCompletion(String requestBody) -> SynapseResponse',
+    description: 'Send a raw JSON request body for low-level chat completion control.',
+    module: 'synapse-core',
+  },
+  {
+    method: 'chatCompletion',
+    signature: 'chatCompletion(String requestBody, String modelName) -> SynapseResponse',
+    description: 'Send a raw JSON request body to a specific model, overriding the configured default.',
     module: 'synapse-core',
   },
   {
@@ -152,15 +170,39 @@ export const apiMethods = [
     module: 'synapse-core',
   },
   {
+    method: 'streamPrompt',
+    signature: 'streamPrompt(String prompt, Consumer<String> onChunk, String modelName)',
+    description: 'Stream a text prompt to a specific model, overriding the configured default.',
+    module: 'synapse-core',
+  },
+  {
     method: 'streamChat',
     signature: 'streamChat(List<ChatMessage> messages, Consumer<String> onChunk)',
     description: 'Stream a multi-turn conversation with real-time token delivery.',
     module: 'synapse-core',
   },
   {
+    method: 'streamChat',
+    signature: 'streamChat(List<ChatMessage> messages, Consumer<String> onChunk, String modelName)',
+    description: 'Stream a multi-turn conversation to a specific model, overriding the configured default.',
+    module: 'synapse-core',
+  },
+  {
     method: 'streamCompletion',
-    signature: 'streamCompletion(String prompt, Consumer<String> onChunk)',
+    signature: 'streamCompletion(String requestBody, Consumer<String> onChunk)',
     description: 'Stream completion with real-time token delivery.',
+    module: 'synapse-core',
+  },
+  {
+    method: 'streamCompletion',
+    signature: 'streamCompletion(String requestBody, Consumer<String> onChunk, String modelName)',
+    description: 'Stream completion to a specific model, overriding the configured default.',
+    module: 'synapse-core',
+  },
+  {
+    method: 'getModelsList',
+    signature: 'getModelsList() -> List<Model>',
+    description: 'Retrieve the list of available models from the /v1/models endpoint.',
     module: 'synapse-core',
   },
 ]

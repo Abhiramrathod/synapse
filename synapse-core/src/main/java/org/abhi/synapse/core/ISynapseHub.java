@@ -64,6 +64,21 @@ public interface ISynapseHub {
     SynapseResponse sendPrompt(String prompt) throws SynapseException;
 
 
+    /**
+     * Sends a single prompt to the specified model and returns the complete response synchronously.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The prompt is sent as a single user message to the specified model.</p>
+     *
+     * @param prompt    the text prompt to send to the LLM
+     * @param modelName the model identifier to use, overriding the configured default;
+     *                  must not be {@code null}
+     * @return a {@link SynapseResponse} containing the generated content, model information,
+     *         and token usage statistics
+     * @throws SynapseException if the request fails due to network issues, rate limiting,
+     *         server errors, or configuration problems
+     * @since 1.0.0
+     */
     SynapseResponse sendPrompt(String prompt, String modelName) throws SynapseException;
 
     /**
@@ -86,6 +101,24 @@ public interface ISynapseHub {
     SynapseResponse sendChat(List<ChatMessage> messages) throws SynapseException;
 
 
+    /**
+     * Sends a multi-turn chat conversation to the specified model and returns the complete response synchronously.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The conversation is sent to the specified model, maintaining full context history.</p>
+     *
+     * @param messages  the ordered list of {@link ChatMessage} objects representing the conversation
+     * @param modelName the model identifier to use, overriding the configured default;
+     *                  must not be {@code null}
+     * @return a {@link SynapseResponse} containing the assistant's reply, model information,
+     *         and token usage statistics
+     * @throws SynapseException if the request fails due to network issues, rate limiting,
+     *         server errors, or configuration problems
+     * @throws IllegalArgumentException if the messages list is null or empty
+     * @since 1.0.0
+     * @see ChatMessage#system(String)
+     * @see ChatMessage#user(String)
+     */
     SynapseResponse sendChat(List<ChatMessage> messages, String modelName) throws SynapseException;
 
     /**
@@ -104,6 +137,21 @@ public interface ISynapseHub {
      */
     SynapseResponse chatCompletion(String requestBody) throws SynapseException;
 
+    /**
+     * Sends a raw chat completion request body to the specified model and returns the complete response synchronously.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The model field in the request body is replaced with the specified model name.</p>
+     *
+     * @param requestBody a JSON string containing the complete request body to send
+     * @param modelName   the model identifier to use, overriding the configured default;
+     *                    must not be {@code null}
+     * @return a {@link SynapseResponse} containing the generated content, model information,
+     *         and token usage statistics
+     * @throws SynapseException if the request fails due to network issues, rate limiting,
+     *         server errors, configuration problems, or malformed JSON
+     * @since 1.0.0
+     */
     SynapseResponse chatCompletion(String requestBody, String modelName) throws SynapseException;
 
     /**
@@ -122,6 +170,21 @@ public interface ISynapseHub {
      */
     void streamPrompt(String prompt, Consumer<String> onChunk) throws SynapseException;
 
+    /**
+     * Sends a prompt to the specified model and streams the response chunks asynchronously via a callback.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * Each text chunk is delivered to the provided {@link Consumer} as it becomes available.</p>
+     *
+     * @param prompt    the text prompt to send to the LLM
+     * @param onChunk   a {@link Consumer} callback that receives each text chunk as it arrives;
+     *                  may be called multiple times before this method returns
+     * @param modelName the model identifier to use, overriding the configured default;
+     *                  must not be {@code null}
+     * @throws SynapseException if the request fails due to network issues, rate limiting,
+     *         server errors, or configuration problems
+     * @since 1.0.0
+     */
     void streamPrompt(String prompt, Consumer<String> onChunk, String modelName) throws SynapseException;
 
     /**
@@ -143,6 +206,23 @@ public interface ISynapseHub {
     void streamChat(List<ChatMessage> messages, Consumer<String> onChunk) throws SynapseException;
 
 
+    /**
+     * Sends a multi-turn chat conversation to the specified model and streams the response chunks
+     * asynchronously via a callback.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * Each content chunk is delivered to the {@code onChunk} callback as it arrives.</p>
+     *
+     * @param messages  the ordered list of {@link ChatMessage} objects representing the conversation
+     * @param onChunk   a {@link Consumer} callback that receives each text chunk as it arrives;
+     *                  may be called multiple times before this method returns
+     * @param modelName the model identifier to use, overriding the configured default;
+     *                  must not be {@code null}
+     * @throws SynapseException if the request fails due to network issues, rate limiting,
+     *         server errors, or configuration problems
+     * @throws IllegalArgumentException if the messages list is null or empty
+     * @since 1.0.0
+     */
     void streamChat(List<ChatMessage> messages, Consumer<String> onChunk, String modelName) throws SynapseException;
 
     /**
@@ -161,8 +241,39 @@ public interface ISynapseHub {
      */
     void streamCompletion(String requestBody, Consumer<String> onChunk) throws SynapseException;
 
+    /**
+     * Sends a raw chat completion request body to the specified model and streams the response chunks
+     * asynchronously via a callback.
+     *
+     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
+     * The model field in the request body is replaced with the specified model name.</p>
+     *
+     * @param requestBody a JSON string containing the complete request body to send
+     * @param onChunk     a {@link Consumer} callback that receives each text chunk as it arrives;
+     *                    may be called multiple times before this method returns
+     * @param modelName   the model identifier to use, overriding the configured default;
+     *                    must not be {@code null}
+     * @throws SynapseException if the request fails due to network issues, rate limiting,
+     *         server errors, configuration problems, or malformed JSON
+     * @since 1.0.0
+     */
     void streamCompletion(String requestBody, Consumer<String> onChunk, String modelName) throws SynapseException;
 
+    /**
+     * Retrieves the list of available models from the LLM API endpoint.
+     *
+     * <p>Sends a GET request to the {@code /v1/models} endpoint (relative to the configured
+     * base URL) and returns the list of models. The base URL is automatically adjusted:
+     * if it already ends with {@code /v1}, only {@code /models} is appended; otherwise
+     * {@code /v1/models} is appended.</p>
+     *
+     * @return a {@link List} of {@link Model} objects representing available models;
+     *         never {@code null} but may be empty if no models are available
+     * @throws SynapseException if the request fails, returns a non-2xx status,
+     *                          or if the response cannot be parsed
+     * @since 1.0.0
+     * @see Model
+     */
     List<Model> getModelsList();
 
     /**

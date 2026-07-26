@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { id: 'synapsehub', label: 'SynapseHub' },
   { id: 'synapseconfig', label: 'SynapseConfig' },
   { id: 'chatmessage', label: 'ChatMessage' },
+  { id: 'model', label: 'Model' },
   { id: 'synapseresponse', label: 'SynapseResponse' },
   { id: 'synapseexception', label: 'SynapseException' },
   { id: 'interceptors', label: 'Interceptors' },
@@ -105,29 +106,71 @@ export default function ApiReferencePage() {
   const [activeNav, setActiveNav] = useState('isynapsehub')
 
   const methodExamples: Record<string, string> = {
-    sendPrompt: `SynapseResponse response = hub.sendPrompt(
+    'sendPrompt': `SynapseResponse response = hub.sendPrompt(
     "What is the capital of France?"
 );
 System.out.println(response.getContent());`,
-    sendChat: `List<ChatMessage> messages = List.of(
+    'sendPrompt(modelName)': `// Override the default model for this request
+SynapseResponse response = hub.sendPrompt(
+    "What is the capital of France?", "gpt-3.5-turbo"
+);
+System.out.println(response.getContent());`,
+    'sendChat': `List<ChatMessage> messages = List.of(
     ChatMessage.system("You are a helpful assistant."),
     ChatMessage.user("Explain quantum computing.")
 );
 SynapseResponse response = hub.sendChat(messages);
 System.out.println(response.getContent());`,
-    chatCompletion: `SynapseResponse response = hub.chatCompletion(
-    "Write a haiku about programming"
+    'sendChat(modelName)': `List<ChatMessage> messages = List.of(
+    ChatMessage.system("You are a helpful assistant."),
+    ChatMessage.user("Explain quantum computing.")
+);
+// Override the default model for this request
+SynapseResponse response = hub.sendChat(messages, "gpt-3.5-turbo");
+System.out.println(response.getContent());`,
+    'chatCompletion': `SynapseResponse response = hub.chatCompletion(
+    "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Hello\\"}]}"
 );
 System.out.println(response.getContent());`,
-    streamPrompt: `hub.streamPrompt("Write a poem about coding", chunk -> {
+    'chatCompletion(modelName)': `// The model field in the body is replaced with the specified model
+SynapseResponse response = hub.chatCompletion(
+    "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Hello\\"}]}", 
+    "gpt-3.5-turbo"
+);
+System.out.println(response.getContent());`,
+    'streamPrompt': `hub.streamPrompt("Write a poem about coding", chunk -> {
     System.out.print(chunk);
 });`,
-    streamChat: `hub.streamChat(messages, chunk -> {
+    'streamPrompt(modelName)': `// Override the default model for streaming
+hub.streamPrompt("Write a poem about coding", chunk -> {
+    System.out.print(chunk);
+}, "gpt-3.5-turbo");`,
+    'streamChat': `hub.streamChat(messages, chunk -> {
     System.out.print(chunk);
 });`,
-    streamCompletion: `hub.streamCompletion("Tell me a joke", chunk -> {
+    'streamChat(modelName)': `// Override the default model for streaming
+hub.streamChat(messages, chunk -> {
     System.out.print(chunk);
-});`,
+}, "gpt-3.5-turbo");`,
+    'streamCompletion': `hub.streamCompletion(
+    "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Tell me a joke\\"}], \\"stream\\": true}",
+    chunk -> {
+        System.out.print(chunk);
+    }
+);`,
+    'streamCompletion(modelName)': `// Override the default model for streaming
+hub.streamCompletion(
+    "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Tell me a joke\\"}], \\"stream\\": true}",
+    chunk -> {
+        System.out.print(chunk);
+    },
+    "gpt-3.5-turbo"
+);`,
+    'getModelsList': `List<Model> models = hub.getModelsList();
+for (Model model : models) {
+    System.out.printf("Model: %s (owned by: %s)%n", 
+        model.getId(), model.getOwnedBy());
+}`,
   }
 
   return (
@@ -188,38 +231,46 @@ System.out.println(response.getContent());`,
                     </h3>
                   </div>
                   <div className="divide-y divide-gray-800/50">
-                    {apiMethods.map((method) => (
-                      <div key={method.method}>
-                        <button
-                          onClick={() => setExpandedMethod(expandedMethod === method.method ? null : method.method)}
-                          className="w-full px-4 py-3 flex items-center gap-4 hover:bg-gray-800/30 transition-colors text-left"
-                        >
-                          <span className="font-mono text-synapse-400 text-sm min-w-[140px]">{method.method}</span>
-                          <span className="font-mono text-gray-300 text-xs flex-1 truncate">{method.signature}</span>
-                          <ChevronRight
-                            className={`w-4 h-4 text-gray-500 transition-transform ${
-                              expandedMethod === method.method ? 'rotate-90' : ''
-                            }`}
-                          />
-                        </button>
-                        <AnimatePresence>
-                          {expandedMethod === method.method && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.2 }}
-                              className="overflow-hidden"
-                            >
-                              <div className="px-4 pb-4">
-                                <p className="text-sm text-gray-400 mb-3">{method.description}</p>
-                                <CodeBlock code={methodExamples[method.method] || ''} title={`${method.method} example`} />
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    ))}
+                    {apiMethods.map((method, idx) => {
+                      const hasModelOverload = method.signature.includes('String modelName');
+                      const exampleKey = hasModelOverload ? `${method.method}(modelName)` : method.method;
+                      const badgeLabel = method.method === 'getModelsList' ? 'List<Model>' : 
+                        method.signature.includes('-> SynapseResponse') ? 'SynapseResponse' :
+                        method.signature.includes('void') ? 'void' : '';
+                      return (
+                        <div key={`${method.method}-${idx}`}>
+                          <button
+                            onClick={() => setExpandedMethod(expandedMethod === exampleKey ? null : exampleKey)}
+                            className="w-full px-4 py-3 flex items-center gap-4 hover:bg-gray-800/30 transition-colors text-left"
+                          >
+                            <span className="font-mono text-synapse-400 text-sm min-w-[140px]">{method.method}</span>
+                            <span className="font-mono text-gray-300 text-xs flex-1 truncate">{method.signature}</span>
+                            {hasModelOverload && <Badge variant="blue">override</Badge>}
+                            <ChevronRight
+                              className={`w-4 h-4 text-gray-500 transition-transform ${
+                                expandedMethod === exampleKey ? 'rotate-90' : ''
+                              }`}
+                            />
+                          </button>
+                          <AnimatePresence>
+                            {expandedMethod === exampleKey && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="px-4 pb-4">
+                                  <p className="text-sm text-gray-400 mb-3">{method.description}</p>
+                                  <CodeBlock code={methodExamples[exampleKey] || ''} title={`${method.method} example`} />
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </section>
@@ -345,6 +396,51 @@ System.out.println(response.getContent());`,
                 </div>
 
                 <CodeBlock code={chatMessageCode} title="ChatMessage Factory Methods" />
+              </section>
+            </FadeIn>
+
+            {/* Model */}
+            <FadeIn>
+              <section id="model">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <Code2 className="w-5 h-5 text-green-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">Model</h2>
+                  <Badge variant="green">class</Badge>
+                </div>
+                <p className="text-gray-400 mb-6">
+                  Represents a model available from an LLM API endpoint. Returned by <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">getModelsList()</code> following the OpenAI-compatible model list format.
+                </p>
+
+                <div className="glass-card overflow-hidden mb-6">
+                  <div className="p-4 border-b border-gray-800/50">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      Getters
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-gray-800/50">
+                    {[
+                      { method: 'getId()', type: 'String', description: 'Unique model identifier (e.g. "gpt-4")' },
+                      { method: 'getObject()', type: 'String', description: 'Object type, typically "model"' },
+                      { method: 'getCreated()', type: 'long', description: 'Unix timestamp when the model was created' },
+                      { method: 'getOwnedBy()', type: 'String', description: 'Organization that owns the model' },
+                    ].map((item) => (
+                      <div key={item.method} className="px-4 py-3 flex items-center gap-4">
+                        <span className="font-mono text-synapse-400 text-sm min-w-[150px]">{item.method}</span>
+                        <span className="font-mono text-gray-500 text-xs min-w-[60px]">{item.type}</span>
+                        <span className="text-gray-400 text-sm flex-1">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <CodeBlock code={`List<Model> models = hub.getModelsList();
+for (Model model : models) {
+    System.out.printf("Model: %s (owned by: %s)%n",
+        model.getId(), model.getOwnedBy());
+}`} title="Listing Available Models" />
               </section>
             </FadeIn>
 

@@ -85,6 +85,7 @@ graph LR
         ChatMessage
         SynapseResponse
         SynapseException
+        Model
     end
     
     subgraph "synapse-interceptors"
@@ -125,11 +126,18 @@ classDiagram
     class ISynapseHub {
         <<interface>>
         +sendPrompt(String) SynapseResponse
+        +sendPrompt(String, String) SynapseResponse
         +sendChat(List~ChatMessage~) SynapseResponse
+        +sendChat(List~ChatMessage~, String) SynapseResponse
         +chatCompletion(String) SynapseResponse
+        +chatCompletion(String, String) SynapseResponse
         +streamPrompt(String, Consumer~String~)
+        +streamPrompt(String, Consumer~String~, String)
         +streamChat(List~ChatMessage~, Consumer~String~)
+        +streamChat(List~ChatMessage~, Consumer~String~, String)
         +streamCompletion(String, Consumer~String~)
+        +streamCompletion(String, Consumer~String~, String)
+        +getModelsList() List~Model~
         +close()
     }
     
@@ -140,8 +148,18 @@ classDiagram
         -SynapseRetryHandler retryHandler
         -SynapseMetricsCollector metricsCollector
         +sendPrompt(String) SynapseResponse
+        +sendPrompt(String, String) SynapseResponse
         +sendChat(List~ChatMessage~) SynapseResponse
+        +sendChat(List~ChatMessage~, String) SynapseResponse
+        +chatCompletion(String) SynapseResponse
+        +chatCompletion(String, String) SynapseResponse
         +streamPrompt(String, Consumer~String~)
+        +streamPrompt(String, Consumer~String~, String)
+        +streamChat(List~ChatMessage~, Consumer~String~)
+        +streamChat(List~ChatMessage~, Consumer~String~, String)
+        +streamCompletion(String, Consumer~String~)
+        +streamCompletion(String, Consumer~String~, String)
+        +getModelsList() List~Model~
         +getMetrics() SynapseMetrics
     }
     
@@ -460,6 +478,30 @@ try (SynapseHub hub = new SynapseHub(config)) {
 }
 ```
 
+#### 4. List Available Models
+
+```java
+try (SynapseHub hub = new SynapseHub(config)) {
+    List<Model> models = hub.getModelsList();
+    for (Model model : models) {
+        System.out.printf("Model: %s (owned by: %s)%n", model.getId(), model.getOwnedBy());
+    }
+}
+```
+
+#### 5. Model Override
+
+```java
+try (SynapseHub hub = new SynapseHub(config)) {
+    // Use a different model than the configured default
+    SynapseResponse response = hub.sendPrompt("Hello", "gpt-3.5-turbo");
+    System.out.println(response.getContent());
+    
+    // Override model for streaming
+    hub.streamPrompt("Write a haiku", chunk -> System.out.print(chunk), "gpt-3.5-turbo");
+}
+```
+
 ## Module Details
 
 ### synapse-core
@@ -472,6 +514,7 @@ The foundation module containing core interfaces and data models.
 | `ChatMessage` | Represents a message in conversation |
 | `SynapseResponse` | Response from LLM API |
 | `SynapseException` | Custom exception with error types |
+| `Model` | Model metadata from `/v1/models` endpoint |
 
 ### synapse-interceptors
 
