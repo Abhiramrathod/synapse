@@ -149,6 +149,12 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         return sendChat(List.of(ChatMessage.user(prompt)));
     }
 
+    @Override
+    public SynapseResponse sendPrompt(String prompt, String modelName) throws SynapseException {
+        checkNotClosed();
+        return sendChat(List.of(ChatMessage.user(prompt)), modelName);
+    }
+
     /**
      * Sends a list of chat messages to the LLM and returns the complete response.
      *
@@ -167,6 +173,14 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     public SynapseResponse sendChat(List<ChatMessage> messages) throws SynapseException {
         checkNotClosed();
         Map<String, Object> body = requestBuilder.buildMessagesBody(messages, false);
+        String jsonBody = requestBuilder.serializeBody(body);
+        return executeWithRetry(jsonBody, false);
+    }
+
+    @Override
+    public SynapseResponse sendChat(List<ChatMessage> messages, String modelName) throws SynapseException {
+        checkNotClosed();
+        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, false, modelName);
         String jsonBody = requestBuilder.serializeBody(body);
         return executeWithRetry(jsonBody, false);
     }
@@ -192,6 +206,13 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         return executeWithRetry(requestBody, false);
     }
 
+    @Override
+    public SynapseResponse chatCompletion(String requestBody, String modelName) throws SynapseException {
+        checkNotClosed();
+        String overriddenBody = requestBuilder.replaceModelInBody(requestBody, modelName);
+        return executeWithRetry(overriddenBody, false);
+    }
+
     /**
      * Sends a single prompt to the LLM and streams the response chunks via the
      * provided callback.
@@ -211,6 +232,12 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     public void streamPrompt(String prompt, Consumer<String> onChunk) throws SynapseException {
         checkNotClosed();
         streamChat(List.of(ChatMessage.user(prompt)), onChunk);
+    }
+
+    @Override
+    public void streamPrompt(String prompt, Consumer<String> onChunk, String modelName) throws SynapseException {
+        checkNotClosed();
+        streamChat(List.of(ChatMessage.user(prompt)), onChunk, modelName);
     }
 
     /**
@@ -234,6 +261,14 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             throws SynapseException {
         checkNotClosed();
         Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true);
+        String jsonBody = requestBuilder.serializeBody(body);
+        streamCompletion(jsonBody, onChunk);
+    }
+
+    @Override
+    public void streamChat(List<ChatMessage> messages, Consumer<String> onChunk, String modelName) throws SynapseException {
+        checkNotClosed();
+        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true, modelName);
         String jsonBody = requestBuilder.serializeBody(body);
         streamCompletion(jsonBody, onChunk);
     }
@@ -300,6 +335,13 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             throw metricsCollector.recordFailureAndThrow(startTime,
                     "Streaming request failed", e, SynapseException.ExceptionType.STREAMING_ERROR);
         }
+    }
+
+    @Override
+    public void streamCompletion(String requestBody, Consumer<String> onChunk, String modelName) throws SynapseException {
+        checkNotClosed();
+        String overriddenBody = requestBuilder.replaceModelInBody(requestBody, modelName);
+        streamCompletion(overriddenBody, onChunk);
     }
 
     @Override

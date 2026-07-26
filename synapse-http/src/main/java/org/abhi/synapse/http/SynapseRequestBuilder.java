@@ -4,7 +4,9 @@ import org.abhi.synapse.config.SynapseConfig;
 import org.abhi.synapse.core.exception.SynapseException;
 import org.abhi.synapse.core.model.ChatMessage;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
@@ -84,8 +86,12 @@ class SynapseRequestBuilder {
      * @since 1.0.0
      */
     Map<String, Object> buildMessagesBody(List<ChatMessage> messages, boolean stream) {
+        return buildMessagesBody(messages, stream, config.getModelName());
+    }
+
+    Map<String, Object> buildMessagesBody(List<ChatMessage> messages, boolean stream, String modelName) {
         Map<String, Object> body = new HashMap<>();
-        body.put("model", config.getModelName());
+        body.put("model", modelName);
         body.put("messages", messages);
         body.put("temperature", config.getTemperature());
         body.put("max_tokens", config.getMaxTokens());
@@ -93,6 +99,19 @@ class SynapseRequestBuilder {
             body.put("stream", true);
         }
         return body;
+    }
+
+    String replaceModelInBody(String requestBody, String modelName) throws SynapseException {
+        try {
+            JsonNode root = objectMapper.readTree(requestBody);
+            if (root instanceof ObjectNode) {
+                ((ObjectNode) root).put("model", modelName);
+            }
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new SynapseException("Failed to replace model name in request body", e,
+                    SynapseException.ExceptionType.PARSE_ERROR);
+        }
     }
 
     /**

@@ -63,6 +63,9 @@ public interface ISynapseHub {
      */
     SynapseResponse sendPrompt(String prompt) throws SynapseException;
 
+
+    SynapseResponse sendPrompt(String prompt, String modelName) throws SynapseException;
+
     /**
      * Sends a multi-turn chat conversation to the LLM and returns the complete response synchronously.
      *
@@ -82,6 +85,9 @@ public interface ISynapseHub {
      */
     SynapseResponse sendChat(List<ChatMessage> messages) throws SynapseException;
 
+
+    SynapseResponse sendChat(List<ChatMessage> messages, String modelName) throws SynapseException;
+
     /**
      * Sends a raw chat completion request body to the LLM and returns the complete response synchronously.
      *
@@ -98,6 +104,8 @@ public interface ISynapseHub {
      */
     SynapseResponse chatCompletion(String requestBody) throws SynapseException;
 
+    SynapseResponse chatCompletion(String requestBody, String modelName) throws SynapseException;
+
     /**
      * Sends a prompt to the LLM and streams the response chunks asynchronously via a callback.
      *
@@ -113,6 +121,8 @@ public interface ISynapseHub {
      * @since 1.0.0
      */
     void streamPrompt(String prompt, Consumer<String> onChunk) throws SynapseException;
+
+    void streamPrompt(String prompt, Consumer<String> onChunk, String modelName) throws SynapseException;
 
     /**
      * Sends a multi-turn chat conversation to the LLM and streams the response chunks
@@ -132,6 +142,9 @@ public interface ISynapseHub {
      */
     void streamChat(List<ChatMessage> messages, Consumer<String> onChunk) throws SynapseException;
 
+
+    void streamChat(List<ChatMessage> messages, Consumer<String> onChunk, String modelName) throws SynapseException;
+
     /**
      * Sends a raw chat completion request body to the LLM and streams the response chunks
      * asynchronously via a callback.
@@ -148,6 +161,7 @@ public interface ISynapseHub {
      */
     void streamCompletion(String requestBody, Consumer<String> onChunk) throws SynapseException;
 
+    void streamCompletion(String requestBody, Consumer<String> onChunk, String modelName) throws SynapseException;
 
     List<Model> getModelsList();
 
