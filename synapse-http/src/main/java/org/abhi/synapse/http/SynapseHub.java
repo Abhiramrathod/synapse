@@ -24,7 +24,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Primary implementation of {@link ISynapseHub} that provides HTTP-based communication
@@ -376,38 +378,24 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             throws SynapseException {
         checkNotClosed();
         String url = requestBuilder.buildUrl();
+        SynapseRequestContext reqCtx = buildRequestContext(url, requestBody, true);
 
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Content-Type", "application/json");
+        notify(config.getRequestInterceptor(), SynapseRequestInterceptor::beforeRequest, reqCtx);
 
-        SynapseRequestContext requestContext = new SynapseRequestContext(url, requestBody, headers,
-                true, config.getModelName());
-
-        SynapseRequestInterceptor requestInterceptor = config.getRequestInterceptor();
-        if (requestInterceptor != null) {
-            requestInterceptor.beforeRequest(requestContext);
-        }
-
-        HttpRequest request = requestBuilder.buildPostRequest(
-                requestContext.getUrl(), requestContext.getBody());
-
-        log(Level.FINE, "Streaming request to: " + url);
+        HttpRequest request = requestBuilder.buildPostRequest(reqCtx.getUrl(), reqCtx.getBody());
         long startTime = System.currentTimeMillis();
 
         try {
-            streamHandler.handle(request, onChunk, config.isEnableLogging());
+            runWithTiming("Streaming request to: " + url,
+                    () -> streamHandler.handle(request, onChunk, config.isEnableLogging()));
             metricsCollector.recordSuccess(startTime);
 
-            SynapseResponseContext responseContext = new SynapseResponseContext(200, "", Map.of(),
+            SynapseResponseContext resCtx = new SynapseResponseContext(200, "", Map.of(),
                     System.currentTimeMillis() - startTime, config.getModelName(), 0);
-            SynapseResponseInterceptor responseInterceptor = config.getResponseInterceptor();
-            if (responseInterceptor != null) {
-                responseInterceptor.afterResponse(responseContext);
-            }
+            notify(config.getResponseInterceptor(), SynapseResponseInterceptor::afterResponse, resCtx);
         } catch (SynapseException e) {
-            if (requestInterceptor != null) {
-                requestInterceptor.onError(requestContext, e);
-            }
+            notify(config.getRequestInterceptor(),
+                    (SynapseRequestInterceptor i, SynapseRequestContext ctx) -> i.onError(ctx, e), reqCtx);
             throw e;
         } catch (Exception e) {
             throw metricsCollector.recordFailureAndThrow(startTime,
@@ -461,21 +449,19 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         String cleanUrl = config.getBaseUrl().replaceAll("/+$", "");
         String baseUrl = cleanUrl.endsWith("/v1") ? cleanUrl + "/models" : cleanUrl + "/v1/models";
 
-        log(Level.FINE, "Fetching models list from: " + baseUrl);
-        long startTime = System.currentTimeMillis();
-
         HttpRequest request = requestBuilder.buildGetRequest(baseUrl);
-        HttpResponse<String> response = httpClient.send(request);
-
-        long latencyMs = System.currentTimeMillis() - startTime;
+        TimedResult<HttpResponse<String>> timed = executeWithTiming("Fetching models list from: " + baseUrl,
+                () -> httpClient.send(request));
+        HttpResponse<String> response = timed.value();
+        long latencyMs = System.currentTimeMillis() - timed.startTime();
         log(Level.FINE, "Models list fetched in " + latencyMs + "ms with status " + response.statusCode());
 
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            metricsCollector.recordFailure(startTime);
+            metricsCollector.recordFailure(timed.startTime());
             throw new SynapseException(response.statusCode(), response.body());
         }
 
-        metricsCollector.recordSuccess(startTime);
+        metricsCollector.recordSuccess(timed.startTime());
         return parseModels(response.body());
     }
 
@@ -486,11 +472,12 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             JsonNode data = root.path("data");
             List<Model> models = new java.util.ArrayList<>();
             for (JsonNode node : data) {
-                Model model = new Model();
-                model.setId(node.path("id").asText(null));
-                model.setObject(node.path("object").asText(null));
-                model.setCreated(node.path("created").asLong(0));
-                model.setOwnedBy(node.path("owned_by").asText(null));
+                Model model = Model.builder()
+                        .id(node.path("id").asText(null))
+                        .object(node.path("object").asText(null))
+                        .created(node.path("created").asLong(0))
+                        .ownedBy(node.path("owned_by").asText(null))
+                        .build();
                 models.add(model);
             }
             return models;
@@ -529,59 +516,30 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private SynapseResponse executeRequest(String requestBody, boolean streaming)
             throws SynapseException {
         String url = requestBuilder.buildUrl();
+        SynapseRequestContext reqCtx = buildRequestContext(url, requestBody, streaming);
 
-        Map<String, String> headers = new HashMap<>();
-        headers.put("Content-Type", "application/json");
+        notify(config.getRequestInterceptor(), SynapseRequestInterceptor::beforeRequest, reqCtx);
 
-        SynapseRequestContext requestContext = new SynapseRequestContext(url, requestBody, headers,
-                streaming, config.getModelName());
+        HttpRequest request = requestBuilder.buildPostRequest(reqCtx.getUrl(), reqCtx.getBody());
+        TimedResult<HttpResponse<String>> timed = executeWithTiming("Request to: " + url,
+                () -> httpClient.send(request));
+        HttpResponse<String> response = timed.value();
 
-        SynapseRequestInterceptor requestInterceptor = config.getRequestInterceptor();
-        if (requestInterceptor != null) {
-            requestInterceptor.beforeRequest(requestContext);
-        }
-
-        HttpRequest request = requestBuilder.buildPostRequest(
-                requestContext.getUrl(), requestContext.getBody());
-
-        log(Level.FINE, "Request to: " + url);
-        long startTime = System.currentTimeMillis();
-
-        HttpResponse<String> response = httpClient.send(request);
-
-        long latencyMs = System.currentTimeMillis() - startTime;
-
-        SynapseResponseContext responseContext = new SynapseResponseContext(response.statusCode(),
-                response.body(), Map.of(), latencyMs, config.getModelName(), 0);
-
-        SynapseResponseInterceptor responseInterceptor = config.getResponseInterceptor();
-        if (responseInterceptor != null) {
-            responseInterceptor.beforeResponse(responseContext);
-        }
+        SynapseResponseContext resCtx = buildResponseContext(response, timed.startTime());
+        notify(config.getResponseInterceptor(), SynapseResponseInterceptor::beforeResponse, resCtx);
 
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            if (requestInterceptor != null) {
-                requestInterceptor.onError(requestContext,
-                        new SynapseException(response.statusCode(), response.body()));
-            }
-            if (responseInterceptor != null) {
-                responseInterceptor.onError(responseContext,
-                        new SynapseException(response.statusCode(), response.body()));
-            }
-            metricsCollector.recordFailure(startTime);
-            throw new SynapseException(response.statusCode(), response.body());
+            SynapseException ex = new SynapseException(response.statusCode(), response.body());
+            notifyError(reqCtx, resCtx, ex);
+            metricsCollector.recordFailure(timed.startTime());
+            throw ex;
         }
 
         SynapseResponse synapseResponse = responseParser.parse(response.body());
-        metricsCollector.recordSuccess(startTime,
+        metricsCollector.recordSuccess(timed.startTime(),
                 synapseResponse.getPromptTokens(), synapseResponse.getCompletionTokens());
 
-        if (requestInterceptor != null) {
-            requestInterceptor.afterRequest(requestContext);
-        }
-        if (responseInterceptor != null) {
-            responseInterceptor.afterResponse(responseContext);
-        }
+        notifyComplete(reqCtx, resCtx);
 
         return synapseResponse;
     }
@@ -599,6 +557,48 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             throw new SynapseException("SynapseHub is closed",
                     SynapseException.ExceptionType.CONFIG_ERROR);
         }
+    }
+
+    private SynapseRequestContext buildRequestContext(String url, String body, boolean streaming) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Content-Type", "application/json");
+        return new SynapseRequestContext(url, body, headers, streaming, config.getModelName());
+    }
+
+    private SynapseResponseContext buildResponseContext(HttpResponse<String> response, long startTime) {
+        return new SynapseResponseContext(response.statusCode(),
+                response.body(), Map.of(), System.currentTimeMillis() - startTime, config.getModelName(), 0);
+    }
+
+    private void notifyError(SynapseRequestContext reqCtx, SynapseResponseContext resCtx, SynapseException ex) {
+        notify(config.getRequestInterceptor(),
+                (SynapseRequestInterceptor i, SynapseRequestContext ctx) -> i.onError(ctx, ex), reqCtx);
+        notify(config.getResponseInterceptor(),
+                (SynapseResponseInterceptor i, SynapseResponseContext ctx) -> i.onError(ctx, ex), resCtx);
+    }
+
+    private void notifyComplete(SynapseRequestContext reqCtx, SynapseResponseContext resCtx) {
+        notify(config.getRequestInterceptor(), SynapseRequestInterceptor::afterRequest, reqCtx);
+        notify(config.getResponseInterceptor(), SynapseResponseInterceptor::afterResponse, resCtx);
+    }
+
+    private <I, T> void notify(I interceptor, BiConsumer<I, T> callback, T target) {
+        if (interceptor != null) callback.accept(interceptor, target);
+    }
+
+    private record TimedResult<T>(T value, long startTime) {}
+
+    private <T> TimedResult<T> executeWithTiming(String logMessage, Supplier<T> action) {
+        log(Level.FINE, logMessage);
+        long start = System.currentTimeMillis();
+        return new TimedResult<>(action.get(), start);
+    }
+
+    private TimedResult<Void> runWithTiming(String logMessage, Runnable action) {
+        log(Level.FINE, logMessage);
+        long start = System.currentTimeMillis();
+        action.run();
+        return new TimedResult<>(null, start);
     }
 
     /**

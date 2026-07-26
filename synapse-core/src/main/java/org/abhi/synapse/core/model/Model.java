@@ -120,4 +120,98 @@ public class Model {
     public void setOwnedBy(String ownedBy) {
         this.ownedBy = ownedBy;
     }
+
+    /**
+     * Returns a new {@link Builder} for constructing {@code Model} instances.
+     *
+     * @return a new {@code Builder} instance
+     * @since 1.0.0
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * Builder for constructing {@link Model} instances with a fluent API.
+     *
+     * <p>Usage example:</p>
+     * <pre>{@code
+     * Model model = Model.builder()
+     *     .id("gpt-4")
+     *     .object("model")
+     *     .created(1687100000L)
+     *     .ownedBy("openai")
+     *     .build();
+     * }</pre>
+     *
+     * @author Abhiram Rathod
+     * @since 1.0.0
+     */
+    public static class Builder {
+        private String id;
+        private String object;
+        private long created;
+        private String ownedBy;
+
+        private Builder() {
+        }
+
+        /**
+         * Sets the model ID.
+         *
+         * @param id the unique identifier of the model
+         * @return this builder for method chaining
+         * @since 1.0.0
+         */
+        public Builder id(String id) {
+            this.id = id;
+            return this;
+        }
+
+        /**
+         * Sets the object type.
+         *
+         * @param object the object type (e.g. {@code "model"})
+         * @return this builder for method chaining
+         * @since 1.0.0
+         */
+        public Builder object(String object) {
+            this.object = object;
+            return this;
+        }
+
+        /**
+         * Sets the creation timestamp.
+         *
+         * @param created the Unix timestamp (in seconds) when the model was created
+         * @return this builder for method chaining
+         * @since 1.0.0
+         */
+        public Builder created(long created) {
+            this.created = created;
+            return this;
+        }
+
+        /**
+         * Sets the owner organization.
+         *
+         * @param ownedBy the organization that owns the model
+         * @return this builder for method chaining
+         * @since 1.0.0
+         */
+        public Builder ownedBy(String ownedBy) {
+            this.ownedBy = ownedBy;
+            return this;
+        }
+
+        /**
+         * Builds a new {@link Model} instance with the configured values.
+         *
+         * @return a new {@code Model} instance
+         * @since 1.0.0
+         */
+        public Model build() {
+            return new Model(id, object, created, ownedBy);
+        }
+    }
 }
