@@ -1,100 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+      <stop offset="0%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#1f2937"/>
     </linearGradient>
-    <linearGradient id="nodeBlue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#5c7cfa;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#4263eb;stop-opacity:1" />
+    <linearGradient id="green" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00e676"/>
+      <stop offset="100%" stop-color="#69f0ae"/>
     </linearGradient>
-    <linearGradient id="nodeGreen" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#00ff88;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:1" />
-    </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-    <filter id="softGlow">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
   </defs>
-  
+
   <!-- Background -->
   <rect width="128" height="128" rx="28" fill="url(#bg)"/>
-  <rect width="128" height="128" rx="28" fill="none" stroke="#5c7cfa" stroke-width="0.5" opacity="0.3"/>
-  
-  <!-- Neural network connections (glowing lines) -->
-  <g filter="url(#glow)" opacity="0.6">
-    <!-- Layer 1 to Layer 2 -->
-    <line x1="30" y1="36" x2="64" y2="28" stroke="url(#nodeBlue)" stroke-width="1" opacity="0.5"/>
-    <line x1="30" y1="36" x2="64" y2="64" stroke="url(#nodeBlue)" stroke-width="1" opacity="0.5"/>
-    <line x1="30" y1="64" x2="64" y2="28" stroke="url(#nodeBlue)" stroke-width="1" opacity="0.4"/>
-    <line x1="30" y1="64" x2="64" y2="64" stroke="url(#nodeBlue)" stroke-width="1" opacity="0.6"/>
-    <line x1="30" y1="64" x2="64" y2="100" stroke="url(#nodeBlue)" stroke-width="1" opacity="0.4"/>
-    <line x1="30" y1="92" x2="64" y2="64" stroke="url(#nodeBlue)" stroke-width="1" opacity="0.5"/>
-    <line x1="30" y1="92" x2="64" y2="100" stroke="url(#nodeBlue)" stroke-width="1" opacity="0.5"/>
-    
-    <!-- Layer 2 to Layer 3 -->
-    <line x1="64" y1="28" x2="98" y2="44" stroke="url(#nodeGreen)" stroke-width="1" opacity="0.5"/>
-    <line x1="64" y1="28" x2="98" y2="84" stroke="url(#nodeGreen)" stroke-width="1" opacity="0.3"/>
-    <line x1="64" y1="64" x2="98" y2="44" stroke="url(#nodeGreen)" stroke-width="1.2" opacity="0.7"/>
-    <line x1="64" y1="64" x2="98" y2="84" stroke="url(#nodeGreen)" stroke-width="1.2" opacity="0.7"/>
-    <line x1="64" y1="100" x2="98" y2="44" stroke="url(#nodeGreen)" stroke-width="1" opacity="0.3"/>
-    <line x1="64" y1="100" x2="98" y2="84" stroke="url(#nodeGreen)" stroke-width="1" opacity="0.5"/>
-  </g>
-  
-  <!-- Signal pulses on connections -->
-  <g filter="url(#softGlow)">
-    <circle cx="47" cy="48" r="2" fill="#00ff88" opacity="0.9">
-      <animate attributeName="cx" values="30;64" dur="2s" repeatCount="indefinite"/>
-      <animate attributeName="cy" values="36;28" dur="2s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0;0.9;0" dur="2s" repeatCount="indefinite"/>
-    </circle>
-    <circle cx="64" cy="64" r="2" fill="#00d4ff" opacity="0.8">
-      <animate attributeName="cx" values="64;98" dur="1.8s" repeatCount="indefinite"/>
-      <animate attributeName="cy" values="64;44" dur="1.8s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0;0.8;0" dur="1.8s" repeatCount="indefinite"/>
-    </circle>
-    <circle cx="47" cy="78" r="1.5" fill="#5c7cfa" opacity="0.7">
-      <animate attributeName="cx" values="30;64" dur="2.5s" repeatCount="indefinite"/>
-      <animate attributeName="cy" values="64;100" dur="2.5s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0;0.7;0" dur="2.5s" repeatCount="indefinite"/>
-    </circle>
-  </g>
-  
-  <!-- Input layer nodes -->
-  <g filter="url(#glow)">
-    <circle cx="30" cy="36" r="5" fill="url(#nodeBlue)"/>
-    <circle cx="30" cy="64" r="6" fill="url(#nodeBlue)"/>
-    <circle cx="30" cy="92" r="5" fill="url(#nodeBlue)"/>
-  </g>
-  
-  <!-- Hidden layer nodes -->
-  <g filter="url(#glow)">
-    <circle cx="64" cy="28" r="4.5" fill="#8b5cf6"/>
-    <circle cx="64" cy="64" r="7" fill="#5c7cfa">
-      <animate attributeName="r" values="7;8;7" dur="3s" repeatCount="indefinite"/>
-    </circle>
-    <circle cx="64" cy="100" r="4.5" fill="#8b5cf6"/>
-  </g>
-  
-  <!-- Output layer nodes -->
-  <g filter="url(#glow)">
-    <circle cx="98" cy="44" r="5.5" fill="url(#nodeGreen)"/>
-    <circle cx="98" cy="84" r="5.5" fill="url(#nodeGreen)"/>
-  </g>
-  
+
+  <!-- Connections -->
+  <line x1="28" y1="36" x2="64" y2="24" stroke="#00e676" stroke-width="1.5" opacity="0.3"/>
+  <line x1="28" y1="36" x2="64" y2="64" stroke="#00e676" stroke-width="1.5" opacity="0.3"/>
+  <line x1="28" y1="64" x2="64" y2="24" stroke="#00e676" stroke-width="1.5" opacity="0.25"/>
+  <line x1="28" y1="64" x2="64" y2="64" stroke="#00e676" stroke-width="1.5" opacity="0.4"/>
+  <line x1="28" y1="64" x2="64" y2="104" stroke="#00e676" stroke-width="1.5" opacity="0.25"/>
+  <line x1="28" y1="92" x2="64" y2="64" stroke="#00e676" stroke-width="1.5" opacity="0.3"/>
+  <line x1="28" y1="92" x2="64" y2="104" stroke="#00e676" stroke-width="1.5" opacity="0.3"/>
+  <line x1="64" y1="24" x2="100" y2="44" stroke="#69f0ae" stroke-width="1.5" opacity="0.35"/>
+  <line x1="64" y1="24" x2="100" y2="84" stroke="#69f0ae" stroke-width="1.5" opacity="0.2"/>
+  <line x1="64" y1="64" x2="100" y2="44" stroke="#69f0ae" stroke-width="1.8" opacity="0.5"/>
+  <line x1="64" y1="64" x2="100" y2="84" stroke="#69f0ae" stroke-width="1.8" opacity="0.5"/>
+  <line x1="64" y1="104" x2="100" y2="44" stroke="#69f0ae" stroke-width="1.5" opacity="0.2"/>
+  <line x1="64" y1="104" x2="100" y2="84" stroke="#69f0ae" stroke-width="1.5" opacity="0.35"/>
+
+  <!-- Input layer -->
+  <circle cx="28" cy="36" r="6" fill="#00e676"/>
+  <circle cx="28" cy="64" r="7" fill="#00e676"/>
+  <circle cx="28" cy="92" r="6" fill="#00e676"/>
+
+  <!-- Hidden layer -->
+  <circle cx="64" cy="24" r="5.5" fill="#2e7d32"/>
+  <circle cx="64" cy="64" r="8" fill="#1b5e20"/>
+  <circle cx="64" cy="104" r="5.5" fill="#2e7d32"/>
+
+  <!-- Output layer -->
+  <circle cx="100" cy="44" r="6.5" fill="#b9f6ca"/>
+  <circle cx="100" cy="84" r="6.5" fill="#b9f6ca"/>
+
   <!-- Center highlight -->
-  <circle cx="64" cy="64" r="3" fill="#ffffff" opacity="0.9">
-    <animate attributeName="opacity" values="0.9;0.5;0.9" dur="2s" repeatCount="indefinite"/>
-  </circle>
+  <circle cx="64" cy="64" r="3.5" fill="#ffffff" opacity="0.85"/>
 </svg>

@@ -89,7 +89,7 @@ export default function HomePage() {
               <Badge>Maven 3.8+</Badge>
               <Badge variant="green">Spring Boot 3.x</Badge>
               <Badge variant="blue">OpenAI Compatible</Badge>
-              <Badge variant="purple">MIT License</Badge>
+              <Badge variant="purple">Apache 2.0</Badge>
             </div>
           </FadeIn>
         </div>
