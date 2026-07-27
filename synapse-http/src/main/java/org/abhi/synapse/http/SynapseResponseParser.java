@@ -1,10 +1,14 @@
 package org.abhi.synapse.http;
 
 import org.abhi.synapse.core.exception.SynapseException;
+import org.abhi.synapse.core.model.Model;
 import org.abhi.synapse.core.model.SynapseResponse;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Parses JSON response bodies from LLM API endpoints into {@link SynapseResponse} objects.
@@ -74,6 +78,25 @@ class SynapseResponseParser {
             return response;
         } catch (Exception e) {
             throw new SynapseException("Failed to parse LLM response", e,
+                    SynapseException.ExceptionType.PARSE_ERROR);
+        }
+    }
+
+    List<Model> parseModels(String responseBody) throws SynapseException {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            List<Model> models = new ArrayList<>();
+            for (JsonNode n : root.path("data")) {
+                models.add(Model.builder()
+                        .id(n.path("id").asText(null))
+                        .object(n.path("object").asText(null))
+                        .created(n.path("created").asLong(0))
+                        .ownedBy(n.path("owned_by").asText(null))
+                        .build());
+            }
+            return models;
+        } catch (Exception e) {
+            throw new SynapseException("Failed to parse models response", e,
                     SynapseException.ExceptionType.PARSE_ERROR);
         }
     }

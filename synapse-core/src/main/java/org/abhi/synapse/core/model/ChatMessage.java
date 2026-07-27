@@ -1,5 +1,7 @@
 package org.abhi.synapse.core.model;
 
+import java.util.List;
+
 /**
  * Represents a single message in a chat conversation with an LLM.
  *
@@ -33,6 +35,9 @@ public class ChatMessage {
 
     private String role;
     private String content;
+    private String toolCallId;
+    private String name;
+    private List<ToolCall> toolCalls;
 
     /**
      * Default no-argument constructor for {@code ChatMessage}.
@@ -98,6 +103,74 @@ public class ChatMessage {
     }
 
     /**
+     * Returns the tool call ID this message is responding to.
+     *
+     * <p>Used when {@code role} is {@code "tool"} to identify which tool call this
+     * response corresponds to.</p>
+     *
+     * @return the tool call ID, or {@code null} if not set
+     * @since 1.0.0
+     */
+    public String getToolCallId() {
+        return toolCallId;
+    }
+
+    /**
+     * Sets the tool call ID this message is responding to.
+     *
+     * @param toolCallId the tool call ID
+     * @since 1.0.0
+     */
+    public void setToolCallId(String toolCallId) {
+        this.toolCallId = toolCallId;
+    }
+
+    /**
+     * Returns the name associated with this message.
+     *
+     * <p>Used for tool messages to identify the tool that produced the result.</p>
+     *
+     * @return the name, or {@code null} if not set
+     * @since 1.0.0
+     */
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * Sets the name associated with this message.
+     *
+     * @param name the name
+     * @since 1.0.0
+     */
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    /**
+     * Returns the tool calls made by the assistant in this message.
+     *
+     * <p>Used when {@code role} is {@code "assistant"} and the model requests tool
+     * invocations rather than generating text content.</p>
+     *
+     * @return the list of tool calls, or {@code null} if not set
+     * @since 1.0.0
+     */
+    public List<ToolCall> getToolCalls() {
+        return toolCalls;
+    }
+
+    /**
+     * Sets the tool calls made by the assistant in this message.
+     *
+     * @param toolCalls the list of tool calls
+     * @since 1.0.0
+     */
+    public void setToolCalls(List<ToolCall> toolCalls) {
+        this.toolCalls = toolCalls;
+    }
+
+    /**
      * Creates a system message that sets the behavior and persona for the assistant.
      *
      * <p>System messages are typically placed at the beginning of a conversation to
@@ -134,5 +207,24 @@ public class ChatMessage {
      */
     public static ChatMessage assistant(String content) {
         return new ChatMessage("assistant", content);
+    }
+
+    /**
+     * Creates a tool result message containing the output of a tool invocation.
+     *
+     * <p>This is used in multi-turn tool-calling conversations to provide the LLM
+     * with the result of a previously requested tool call.</p>
+     *
+     * @param toolCallId the ID of the tool call this message responds to
+     * @param name       the name of the tool that was invoked
+     * @param content    the result content produced by the tool
+     * @return a new {@code ChatMessage} with role {@code "tool"}
+     * @since 1.0.0
+     */
+    public static ChatMessage tool(String toolCallId, String name, String content) {
+        ChatMessage msg = new ChatMessage("tool", content);
+        msg.setToolCallId(toolCallId);
+        msg.setName(name);
+        return msg;
     }
 }

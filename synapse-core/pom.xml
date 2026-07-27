@@ -11,6 +11,27 @@
 
 	<artifactId>synapse-core</artifactId>
 	<name>Synapse Core</name>
+
+	<properties>
+		<automatic.module.name>org.abhi.synapse.core</automatic.module.name>
+	</properties>
 	<description>Core interfaces, models, and exceptions</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.assertj</groupId>
+			<artifactId>assertj-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
 
 </project>

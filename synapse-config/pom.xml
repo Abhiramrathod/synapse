@@ -11,6 +11,10 @@
 
 	<artifactId>synapse-config</artifactId>
 	<name>Synapse Config</name>
+
+	<properties>
+		<automatic.module.name>org.abhi.synapse.config</automatic.module.name>
+	</properties>
 	<description>Configuration classes</description>
 
 	<dependencies>
@@ -21,6 +25,20 @@
 		<dependency>
 			<groupId>org.abhi</groupId>
 			<artifactId>synapse-interceptors</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.assertj</groupId>
+			<artifactId>assertj-core</artifactId>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 

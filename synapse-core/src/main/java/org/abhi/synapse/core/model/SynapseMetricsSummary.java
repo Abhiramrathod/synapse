@@ -33,24 +33,21 @@ package org.abhi.synapse.core.model;
 public class SynapseMetricsSummary {
 
     private final String model;
+    private final String provider;
     private final long latencyMs;
     private final int promptTokens;
     private final int completionTokens;
     private final boolean success;
 
-    /**
-     * Constructs a new immutable {@code SynapseMetricsSummary} with all metrics specified.
-     *
-     * @param model            the identifier of the model used for the request
-     * @param latencyMs        the total round-trip latency in milliseconds
-     * @param promptTokens     the number of tokens consumed by the input prompt
-     * @param completionTokens the number of tokens generated in the response
-     * @param success          {@code true} if the request completed successfully, {@code false} otherwise
-     * @since 1.0.0
-     */
     public SynapseMetricsSummary(String model, long latencyMs, int promptTokens,
                                   int completionTokens, boolean success) {
+        this(model, null, latencyMs, promptTokens, completionTokens, success);
+    }
+
+    public SynapseMetricsSummary(String model, String provider, long latencyMs, int promptTokens,
+                                  int completionTokens, boolean success) {
         this.model = model;
+        this.provider = provider;
         this.latencyMs = latencyMs;
         this.promptTokens = promptTokens;
         this.completionTokens = completionTokens;
@@ -65,6 +62,10 @@ public class SynapseMetricsSummary {
      */
     public String getModel() {
         return model;
+    }
+
+    public String getProvider() {
+        return provider;
     }
 
     /**

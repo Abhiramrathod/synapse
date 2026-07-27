@@ -1,5 +1,7 @@
 package org.abhi.synapse.core.model;
 
+import java.util.List;
+
 /**
  * Represents the response returned by an LLM after a synchronous request.
  *
@@ -31,6 +33,10 @@ public class SynapseResponse {
     private int promptTokens;
     private int completionTokens;
     private String finishReason;
+    private List<ToolCall> toolCalls;
+    private String responseFormat;
+    private String correlationId;
+    private String provider;
 
     /**
      * Default no-argument constructor for {@code SynapseResponse}.
@@ -165,5 +171,37 @@ public class SynapseResponse {
      */
     public void setFinishReason(String finishReason) {
         this.finishReason = finishReason;
+    }
+
+    public List<ToolCall> getToolCalls() {
+        return toolCalls;
+    }
+
+    public void setToolCalls(List<ToolCall> toolCalls) {
+        this.toolCalls = toolCalls;
+    }
+
+    public String getResponseFormat() {
+        return responseFormat;
+    }
+
+    public void setResponseFormat(String responseFormat) {
+        this.responseFormat = responseFormat;
+    }
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
     }
 }

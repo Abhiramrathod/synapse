@@ -4,9 +4,8 @@ import org.abhi.synapse.config.SynapseConfig;
 import org.abhi.synapse.core.exception.SynapseException;
 import org.abhi.synapse.core.model.SynapseMetricsSummary;
 import org.abhi.synapse.interceptors.SynapseMetricsListener;
-
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Collects and records metrics for Synapse HTTP requests.
@@ -25,7 +24,7 @@ import java.util.logging.Logger;
  */
 public class SynapseMetricsCollector {
 
-    private static final Logger LOGGER = Logger.getLogger(SynapseMetricsCollector.class.getName());
+    private static final Logger log = LoggerFactory.getLogger(SynapseMetricsCollector.class);
 
     private final SynapseMetrics metrics;
     private final SynapseConfig config;
@@ -47,7 +46,7 @@ public class SynapseMetricsCollector {
      *
      * <p>Computes latency from the given {@code startTime}, stores the metrics via
      * {@link SynapseMetrics#recordRequest}, notifies the registered
-     * {@link SynapseMetricsListener} (if any), and logs a {@code FINE}-level message
+     * {@link SynapseMetricsListener} (if any), and logs a debug-level message
      * when logging is enabled.</p>
      *
      * @param startTime       the epoch millis timestamp when the request was initiated
@@ -65,8 +64,8 @@ public class SynapseMetricsCollector {
                     config.getModelName(), latencyMs, promptTokens, completionTokens, true));
         }
         if (config.isEnableLogging()) {
-            LOGGER.log(Level.FINE, "[Synapse] Response in " + latencyMs + "ms, tokens: "
-                    + promptTokens + " prompt + " + completionTokens + " completion");
+            log.debug("[Synapse] Response in {}ms, tokens: {} prompt + {} completion",
+                    latencyMs, promptTokens, completionTokens);
         }
     }
 

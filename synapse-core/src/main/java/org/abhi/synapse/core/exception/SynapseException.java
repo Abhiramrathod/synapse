@@ -74,7 +74,10 @@ public class SynapseException extends RuntimeException {
         STREAMING_ERROR,
 
         /** The exception was caused by exhausting all retry attempts. */
-        RETRY_EXHAUSTED
+        RETRY_EXHAUSTED,
+
+        /** The exception was caused by the circuit breaker being open. */
+        CIRCUIT_BREAKER_OPEN
     }
 
     /**

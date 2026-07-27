@@ -1,8 +1,9 @@
 package org.abhi.synapse.metrics;
 
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.LongAdder;
 
 /**
  * In-memory metrics storage for Synapse HTTP requests.
@@ -11,8 +12,9 @@ import java.util.List;
  * counts. Each request is recorded via {@link #recordRequest} and stored both as aggregated
  * counters and as individual {@link RequestMetric} entries for detailed analysis.</p>
  *
- * <p>Thread-safety: this class is <em>not</em> thread-safe. Callers must synchronize access
- * if multiple threads record metrics concurrently.</p>
+ * <p>Thread-safety: this class is thread-safe. Aggregate counters use {@link LongAdder}
+ * for high-throughput concurrent writes, and the request list uses
+ * {@link CopyOnWriteArrayList} for safe concurrent iteration.</p>
  *
  * @author Abhiram Rathod
  * @since 1.0.0
@@ -21,13 +23,13 @@ import java.util.List;
  */
 public class SynapseMetrics {
 
-    private long totalRequests;
-    private long successfulRequests;
-    private long failedRequests;
-    private long totalPromptTokens;
-    private long totalCompletionTokens;
-    private long totalLatencyMs;
-    private final List<RequestMetric> requestMetrics = new ArrayList<>();
+    private final LongAdder totalRequests = new LongAdder();
+    private final LongAdder successfulRequests = new LongAdder();
+    private final LongAdder failedRequests = new LongAdder();
+    private final LongAdder totalPromptTokens = new LongAdder();
+    private final LongAdder totalCompletionTokens = new LongAdder();
+    private final LongAdder totalLatencyMs = new LongAdder();
+    private final CopyOnWriteArrayList<RequestMetric> requestMetrics = new CopyOnWriteArrayList<>();
 
     /**
      * Records a single HTTP request's metrics.
@@ -44,15 +46,15 @@ public class SynapseMetrics {
      */
     public void recordRequest(String model, long latencyMs, int promptTokens,
                               int completionTokens, boolean success) {
-        totalRequests++;
+        totalRequests.increment();
         if (success) {
-            successfulRequests++;
+            successfulRequests.increment();
         } else {
-            failedRequests++;
+            failedRequests.increment();
         }
-        totalPromptTokens += promptTokens;
-        totalCompletionTokens += completionTokens;
-        totalLatencyMs += latencyMs;
+        totalPromptTokens.add(promptTokens);
+        totalCompletionTokens.add(completionTokens);
+        totalLatencyMs.add(latencyMs);
         requestMetrics.add(new RequestMetric(model, latencyMs, promptTokens,
                 completionTokens, success));
     }
@@ -64,7 +66,7 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public long getTotalRequests() {
-        return totalRequests;
+        return totalRequests.sum();
     }
 
     /**
@@ -74,7 +76,7 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public long getSuccessfulRequests() {
-        return successfulRequests;
+        return successfulRequests.sum();
     }
 
     /**
@@ -84,7 +86,7 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public long getFailedRequests() {
-        return failedRequests;
+        return failedRequests.sum();
     }
 
     /**
@@ -94,7 +96,7 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public long getTotalPromptTokens() {
-        return totalPromptTokens;
+        return totalPromptTokens.sum();
     }
 
     /**
@@ -104,7 +106,7 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public long getTotalCompletionTokens() {
-        return totalCompletionTokens;
+        return totalCompletionTokens.sum();
     }
 
     /**
@@ -114,7 +116,7 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public long getTotalTokens() {
-        return totalPromptTokens + totalCompletionTokens;
+        return totalPromptTokens.sum() + totalCompletionTokens.sum();
     }
 
     /**
@@ -124,7 +126,7 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public long getTotalLatencyMs() {
-        return totalLatencyMs;
+        return totalLatencyMs.sum();
     }
 
     /**
@@ -134,8 +136,9 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public double getAverageLatencyMs() {
-        if (totalRequests == 0) return 0;
-        return (double) totalLatencyMs / totalRequests;
+        long count = totalRequests.sum();
+        if (count == 0) return 0;
+        return (double) totalLatencyMs.sum() / count;
     }
 
     /**
@@ -145,8 +148,9 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public double getSuccessRate() {
-        if (totalRequests == 0) return 0;
-        return (double) successfulRequests / totalRequests * 100;
+        long count = totalRequests.sum();
+        if (count == 0) return 0;
+        return (double) successfulRequests.sum() / count * 100;
     }
 
     /**
@@ -167,12 +171,12 @@ public class SynapseMetrics {
      * @since 1.0.0
      */
     public void reset() {
-        totalRequests = 0;
-        successfulRequests = 0;
-        failedRequests = 0;
-        totalPromptTokens = 0;
-        totalCompletionTokens = 0;
-        totalLatencyMs = 0;
+        totalRequests.reset();
+        successfulRequests.reset();
+        failedRequests.reset();
+        totalPromptTokens.reset();
+        totalCompletionTokens.reset();
+        totalLatencyMs.reset();
         requestMetrics.clear();
     }
 

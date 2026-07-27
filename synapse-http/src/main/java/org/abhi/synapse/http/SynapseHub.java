@@ -2,8 +2,12 @@ package org.abhi.synapse.http;
 
 import org.abhi.synapse.config.SynapseConfig;
 import org.abhi.synapse.core.ISynapseHub;
+import org.abhi.synapse.core.RequestOptions;
+import org.abhi.synapse.core.StreamHandle;
+import org.abhi.synapse.core.StreamListener;
 import org.abhi.synapse.core.exception.SynapseException;
 import org.abhi.synapse.core.model.ChatMessage;
+import org.abhi.synapse.core.CancellationToken;
 import org.abhi.synapse.core.model.Model;
 import org.abhi.synapse.core.model.SynapseRequestContext;
 import org.abhi.synapse.core.model.SynapseResponse;
@@ -13,8 +17,9 @@ import org.abhi.synapse.interceptors.SynapseResponseInterceptor;
 import org.abhi.synapse.metrics.SynapseMetrics;
 import org.abhi.synapse.metrics.SynapseMetricsCollector;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -22,49 +27,16 @@ import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Flow;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/**
- * Primary implementation of {@link ISynapseHub} that provides HTTP-based communication
- * with LLM API endpoints. This class serves as the main entry point for all
- * synchronous and streaming interactions with language models.
- *
- * <p>{@code SynapseHub} orchestrates the full request lifecycle including request
- * construction, retry handling, response parsing, metrics collection, and interceptor
- * invocation. It is designed to be instantiated once and reused across multiple requests.</p>
- *
- * <p>Usage example:</p>
- * <pre>{@code
- * SynapseConfig config = SynapseConfig.builder()
- *     .baseUrl("https://api.openai.com")
- *     .endpoint("/v1/chat/completions")
- *     .apiKey("sk-...")
- *     .modelName("gpt-4")
- *     .build();
- *
- * try (SynapseHub hub = new SynapseHub(config)) {
- *     SynapseResponse response = hub.sendPrompt("Hello, world!");
- *     System.out.println(response.getContent());
- * }
- * }</pre>
- *
- * <p>This class implements {@link AutoCloseable} and should be closed when no longer needed
- * to release associated resources. Once closed, all subsequent API calls will throw
- * {@link SynapseException}.</p>
- *
- * @author Abhiram Rathod
- * @since 1.0.0
- * @see ISynapseHub
- * @see SynapseConfig
- * @see SynapseResponse
- */
 public class SynapseHub implements ISynapseHub, AutoCloseable {
 
-    private static final Logger LOGGER = Logger.getLogger(SynapseHub.class.getName());
+    private static final Logger log = LoggerFactory.getLogger(SynapseHub.class);
 
     private final SynapseConfig config;
     private final SynapseRequestBuilder requestBuilder;
@@ -75,35 +47,15 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private final SynapseMetricsCollector metricsCollector;
     private final SynapseMetrics metrics;
     private final ObjectMapper objectMapper;
+    private final ExecutorService asyncExecutor;
+    private final CircuitBreaker circuitBreaker;
+    private final ConcurrencyLimiter concurrencyLimiter;
     private volatile boolean closed = false;
 
-    /**
-     * Constructs a new {@code SynapseHub} with the specified configuration and a
-     * default {@link ObjectMapper} instance.
-     *
-     * @param config the {@link SynapseConfig} containing connection and model settings;
-     *               must not be {@code null} and must pass validation
-     * @throws IllegalArgumentException if the provided configuration is invalid
-     * @since 1.0.0
-     */
     public SynapseHub(SynapseConfig config) {
         this(config, new ObjectMapper());
     }
 
-    /**
-     * Constructs a new {@code SynapseHub} with the specified configuration and
-     * a custom {@link ObjectMapper} for JSON serialization/deserialization.
-     *
-     * <p>This constructor allows customization of the JSON processing behavior,
-     * which can be useful for advanced serialization configurations or testing.</p>
-     *
-     * @param config     the {@link SynapseConfig} containing connection and model settings;
-     *                   must not be {@code null} and must pass validation
-     * @param objectMapper the {@link ObjectMapper} to use for JSON processing;
-     *                     must not be {@code null}
-     * @throws IllegalArgumentException if the provided configuration is invalid
-     * @since 1.0.0
-     */
     public SynapseHub(SynapseConfig config, ObjectMapper objectMapper) {
         this.config = config;
         this.objectMapper = objectMapper;
@@ -115,16 +67,19 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         this.streamHandler = new SynapseStreamHandler(httpClient, objectMapper);
         this.retryHandler = new SynapseRetryHandler(config);
         this.metricsCollector = new SynapseMetricsCollector(metrics, config);
+        this.circuitBreaker = new CircuitBreaker(
+                config.getCircuitBreakerFailureThreshold(),
+                config.getCircuitBreakerOpenDuration());
+        this.concurrencyLimiter = new ConcurrencyLimiter(config.getMaxConcurrentRequests());
+        this.asyncExecutor = Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r, "synapse-async-" + System.nanoTime());
+            t.setDaemon(true);
+            return t;
+        });
         validateConfig();
+        log.info("[Synapse] Hub initialized for model: {}", config.getModelName());
     }
 
-    /**
-     * Validates the provided {@link SynapseConfig} by delegating to its own validation logic.
-     * This is called during construction to fail fast on invalid configurations.
-     *
-     * @throws IllegalArgumentException if the configuration fails validation
-     * @since 1.0.0
-     */
     private void validateConfig() {
         try {
             config.validate();
@@ -133,58 +88,36 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         }
     }
 
-    /**
-     * Sends a single prompt to the LLM and returns the complete response.
-     *
-     * <p>This is a convenience method that wraps the prompt in a {@link ChatMessage} and
-     * delegates to {@link #sendChat(List)}. The prompt is sent as a single user message.</p>
-     *
-     * @param prompt the text prompt to send to the model; must not be {@code null} or empty
-     * @return the {@link SynapseResponse} containing the model's response and usage metadata
-     * @throws SynapseException if the request fails, is retried and exhausted,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
     public SynapseResponse sendPrompt(String prompt) throws SynapseException {
         checkNotClosed();
         return sendChat(List.of(ChatMessage.user(prompt)));
     }
 
-    /**
-     * Sends a single prompt to the specified model and returns the complete response.
-     *
-     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
-     * The prompt is sent as a single user message to the specified model.</p>
-     *
-     * @param prompt    the text prompt to send to the model; must not be {@code null} or empty
-     * @param modelName the model identifier to use, overriding the configured default;
-     *                  must not be {@code null}
-     * @return the {@link SynapseResponse} containing the model's response and usage metadata
-     * @throws SynapseException if the request fails, is retried and exhausted,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
     public SynapseResponse sendPrompt(String prompt, String modelName) throws SynapseException {
         checkNotClosed();
         return sendChat(List.of(ChatMessage.user(prompt)), modelName);
     }
 
-    /**
-     * Sends a list of chat messages to the LLM and returns the complete response.
-     *
-     * <p>The messages are serialized into an OpenAI-compatible request body and sent
-     * to the configured endpoint. Retry logic is applied if the request fails with
-     * a retryable error.</p>
-     *
-     * @param messages the list of {@link ChatMessage} objects representing the conversation;
-     *                 must not be {@code null} or empty
-     * @return the {@link SynapseResponse} containing the model's response and usage metadata
-     * @throws SynapseException if the request fails, is retried and exhausted,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
+    @Override
+    public SynapseResponse sendPrompt(String prompt, RequestOptions options) throws SynapseException {
+        checkNotClosed();
+        return sendChat(List.of(ChatMessage.user(prompt)), options);
+    }
+
+    @Override
+    public CompletableFuture<SynapseResponse> sendPromptAsync(String prompt) throws SynapseException {
+        checkNotClosed();
+        return sendChatAsync(List.of(ChatMessage.user(prompt)));
+    }
+
+    @Override
+    public CompletableFuture<SynapseResponse> sendPromptAsync(String prompt, RequestOptions options) throws SynapseException {
+        checkNotClosed();
+        return sendChatAsync(List.of(ChatMessage.user(prompt)), options);
+    }
+
     @Override
     public SynapseResponse sendChat(List<ChatMessage> messages) throws SynapseException {
         checkNotClosed();
@@ -193,21 +126,6 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         return executeWithRetry(jsonBody, false);
     }
 
-    /**
-     * Sends a list of chat messages to the specified model and returns the complete response.
-     *
-     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
-     * The messages are serialized and sent to the specified model.</p>
-     *
-     * @param messages  the list of {@link ChatMessage} objects representing the conversation;
-     *                  must not be {@code null} or empty
-     * @param modelName the model identifier to use, overriding the configured default;
-     *                  must not be {@code null}
-     * @return the {@link SynapseResponse} containing the model's response and usage metadata
-     * @throws SynapseException if the request fails, is retried and exhausted,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
     public SynapseResponse sendChat(List<ChatMessage> messages, String modelName) throws SynapseException {
         checkNotClosed();
@@ -216,42 +134,33 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         return executeWithRetry(jsonBody, false);
     }
 
-    /**
-     * Sends a raw JSON request body directly to the LLM chat completion endpoint
-     * and returns the parsed response.
-     *
-     * <p>This method provides low-level access for advanced use cases where the caller
-     * needs full control over the request body format. The body must be a valid JSON
-     * string conforming to the target API's chat completion schema.</p>
-     *
-     * @param requestBody the raw JSON string to send as the request body;
-     *                    must not be {@code null}
-     * @return the {@link SynapseResponse} containing the model's response and usage metadata
-     * @throws SynapseException if the request fails, is retried and exhausted,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
+    @Override
+    public SynapseResponse sendChat(List<ChatMessage> messages, RequestOptions options) throws SynapseException {
+        checkNotClosed();
+        String modelName = options != null && options.getModelName() != null ? options.getModelName() : config.getModelName();
+        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, false, modelName);
+        String jsonBody = requestBuilder.serializeBody(body);
+        return executeWithRetry(jsonBody, false);
+    }
+
+    @Override
+    public CompletableFuture<SynapseResponse> sendChatAsync(List<ChatMessage> messages) throws SynapseException {
+        checkNotClosed();
+        return CompletableFuture.supplyAsync(() -> sendChat(messages), asyncExecutor);
+    }
+
+    @Override
+    public CompletableFuture<SynapseResponse> sendChatAsync(List<ChatMessage> messages, RequestOptions options) throws SynapseException {
+        checkNotClosed();
+        return CompletableFuture.supplyAsync(() -> sendChat(messages, options), asyncExecutor);
+    }
+
     @Override
     public SynapseResponse chatCompletion(String requestBody) throws SynapseException {
         checkNotClosed();
         return executeWithRetry(requestBody, false);
     }
 
-    /**
-     * Sends a raw JSON request body to the specified model and returns the parsed response.
-     *
-     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
-     * The model field in the request body is replaced with the specified model name before sending.</p>
-     *
-     * @param requestBody the raw JSON string to send as the request body;
-     *                    must not be {@code null}
-     * @param modelName   the model identifier to use, overriding the configured default;
-     *                    must not be {@code null}
-     * @return the {@link SynapseResponse} containing the model's response and usage metadata
-     * @throws SynapseException if the request fails, is retried and exhausted,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
     public SynapseResponse chatCompletion(String requestBody, String modelName) throws SynapseException {
         checkNotClosed();
@@ -259,193 +168,151 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         return executeWithRetry(overriddenBody, false);
     }
 
-    /**
-     * Sends a single prompt to the LLM and streams the response chunks via the
-     * provided callback.
-     *
-     * <p>This is a convenience method that wraps the prompt in a {@link ChatMessage} and
-     * delegates to {@link #streamChat(List, Consumer)}. Each content chunk is delivered
-     * to the {@code onChunk} callback as it arrives from the server.</p>
-     *
-     * @param prompt  the text prompt to send to the model; must not be {@code null} or empty
-     * @param onChunk the {@link Consumer} callback that receives each text chunk from the
-     *                streaming response; must not be {@code null}
-     * @throws SynapseException if the streaming request fails,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
-    public void streamPrompt(String prompt, Consumer<String> onChunk) throws SynapseException {
+    public void streamPrompt(String prompt, java.util.function.Consumer<String> onChunk) throws SynapseException {
         checkNotClosed();
         streamChat(List.of(ChatMessage.user(prompt)), onChunk);
     }
 
-    /**
-     * Sends a single prompt to the specified model and streams the response chunks via the
-     * provided callback.
-     *
-     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
-     * The prompt is sent as a single user message to the specified model.</p>
-     *
-     * @param prompt    the text prompt to send to the model; must not be {@code null} or empty
-     * @param onChunk   the {@link Consumer} callback that receives each text chunk from the
-     *                  streaming response; must not be {@code null}
-     * @param modelName the model identifier to use, overriding the configured default;
-     *                  must not be {@code null}
-     * @throws SynapseException if the streaming request fails,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
-    public void streamPrompt(String prompt, Consumer<String> onChunk, String modelName) throws SynapseException {
+    public void streamPrompt(String prompt, java.util.function.Consumer<String> onChunk, String modelName) throws SynapseException {
         checkNotClosed();
         streamChat(List.of(ChatMessage.user(prompt)), onChunk, modelName);
     }
 
-    /**
-     * Sends a list of chat messages to the LLM and streams the response chunks via the
-     * provided callback.
-     *
-     * <p>The messages are serialized into an OpenAI-compatible streaming request body.
-     * Each content chunk from the server-side events (SSE) stream is delivered to the
-     * {@code onChunk} callback as it arrives.</p>
-     *
-     * @param messages the list of {@link ChatMessage} objects representing the conversation;
-     *                 must not be {@code null} or empty
-     * @param onChunk the {@link Consumer} callback that receives each text chunk from the
-     *                streaming response; must not be {@code null}
-     * @throws SynapseException if the streaming request fails,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
-    public void streamChat(List<ChatMessage> messages, Consumer<String> onChunk)
-            throws SynapseException {
+    public StreamHandle streamPrompt(String prompt, StreamListener listener) throws SynapseException {
+        checkNotClosed();
+        return streamChat(List.of(ChatMessage.user(prompt)), listener);
+    }
+
+    @Override
+    public void streamChat(List<ChatMessage> messages, java.util.function.Consumer<String> onChunk) throws SynapseException {
         checkNotClosed();
         Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true);
         String jsonBody = requestBuilder.serializeBody(body);
         streamCompletion(jsonBody, onChunk);
     }
 
-    /**
-     * Sends a list of chat messages to the specified model and streams the response chunks via the
-     * provided callback.
-     *
-     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
-     * Each content chunk from the server-side events (SSE) stream is delivered to the
-     * {@code onChunk} callback as it arrives.</p>
-     *
-     * @param messages  the list of {@link ChatMessage} objects representing the conversation;
-     *                  must not be {@code null} or empty
-     * @param onChunk   the {@link Consumer} callback that receives each text chunk from the
-     *                  streaming response; must not be {@code null}
-     * @param modelName the model identifier to use, overriding the configured default;
-     *                  must not be {@code null}
-     * @throws SynapseException if the streaming request fails,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
-    public void streamChat(List<ChatMessage> messages, Consumer<String> onChunk, String modelName) throws SynapseException {
+    public void streamChat(List<ChatMessage> messages, java.util.function.Consumer<String> onChunk, String modelName) throws SynapseException {
         checkNotClosed();
         Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true, modelName);
         String jsonBody = requestBuilder.serializeBody(body);
         streamCompletion(jsonBody, onChunk);
     }
 
-    /**
-     * Sends a raw JSON request body to the LLM streaming chat completion endpoint
-     * and delivers response chunks via the provided callback.
-     *
-     * <p>This method provides low-level access for advanced use cases where the caller
-     * needs full control over the streaming request body format. The body must be a valid
-     * JSON string conforming to the target API's streaming chat completion schema.</p>
-     *
-     * <p>The method handles the full streaming lifecycle including request interceptor
-     * invocation, SSE stream processing, metrics recording, and response interceptor
-     * notification.</p>
-     *
-     * @param requestBody the raw JSON string to send as the request body;
-     *                    must not be {@code null}
-     * @param onChunk     the {@link Consumer} callback that receives each text chunk from the
-     *                    streaming response; must not be {@code null}
-     * @throws SynapseException if the streaming request fails,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
-    public void streamCompletion(String requestBody, Consumer<String> onChunk)
-            throws SynapseException {
+    public StreamHandle streamChat(List<ChatMessage> messages, StreamListener listener) throws SynapseException {
         checkNotClosed();
-        String url = requestBuilder.buildUrl();
-        SynapseRequestContext reqCtx = buildRequestContext(url, requestBody, true);
+        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true);
+        String jsonBody = requestBuilder.serializeBody(body);
+        return streamCompletion(jsonBody, listener);
+    }
 
-        notify(config.getRequestInterceptor(), SynapseRequestInterceptor::beforeRequest, reqCtx);
+    @Override
+    public void streamCompletion(String requestBody, java.util.function.Consumer<String> onChunk) throws SynapseException {
+        streamCompletion(requestBody, StreamListener.of(onChunk));
+    }
 
-        HttpRequest request = requestBuilder.buildPostRequest(reqCtx.getUrl(), reqCtx.getBody());
-        long startTime = System.currentTimeMillis();
+    @Override
+    public void streamCompletion(String requestBody, java.util.function.Consumer<String> onChunk, String modelName) throws SynapseException {
+        String overriddenBody = requestBuilder.replaceModelInBody(requestBody, modelName);
+        streamCompletion(overriddenBody, StreamListener.of(onChunk));
+    }
 
+    @Override
+    public StreamHandle streamCompletion(String requestBody, StreamListener listener) throws SynapseException {
+        checkNotClosed();
         try {
-            runWithTiming("Streaming request to: " + url,
-                    () -> streamHandler.handle(request, onChunk, config.isEnableLogging()));
-            metricsCollector.recordSuccess(startTime);
-
-            SynapseResponseContext resCtx = new SynapseResponseContext(200, "", Map.of(),
-                    System.currentTimeMillis() - startTime, config.getModelName(), 0);
-            notify(config.getResponseInterceptor(), SynapseResponseInterceptor::afterResponse, resCtx);
+            circuitBreaker.allowRequest();
         } catch (SynapseException e) {
-            notify(config.getRequestInterceptor(),
-                    (SynapseRequestInterceptor i, SynapseRequestContext ctx) -> i.onError(ctx, e), reqCtx);
             throw e;
+        }
+        try {
+            concurrencyLimiter.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SynapseException("Request interrupted while waiting for concurrency slot",
+                    e, SynapseException.ExceptionType.CONFIG_ERROR);
+        }
+        try {
+            CancellationToken token = new CancellationToken();
+            CompletableFuture<SynapseResponse> future = new CompletableFuture<>();
+            String correlationId = java.util.UUID.randomUUID().toString();
+
+            asyncExecutor.submit(() -> {
+                try {
+                    String url = requestBuilder.buildUrl();
+                    SynapseRequestContext reqCtx = buildRequestContext(url, requestBody, true);
+
+                    notify(config.getRequestInterceptor(), SynapseRequestInterceptor::beforeRequest, reqCtx);
+
+                    HttpRequest request = requestBuilder.buildPostRequest(reqCtx.getUrl(), reqCtx.getBody());
+                    long startTime = System.currentTimeMillis();
+
+                    SynapseResponse fullResponse = streamHandler.handleWithStreamListener(
+                            request, listener, token, config.isEnableLogging());
+                    fullResponse.setCorrelationId(correlationId);
+                    circuitBreaker.recordSuccess();
+                    metricsCollector.recordSuccess(startTime);
+                    future.complete(fullResponse);
+
+                    SynapseResponseContext resCtx = new SynapseResponseContext(200, "", Map.of(),
+                            System.currentTimeMillis() - startTime, config.getModelName(), 0);
+                    notify(config.getResponseInterceptor(), SynapseResponseInterceptor::afterResponse, resCtx);
+                } catch (SynapseException e) {
+                    circuitBreaker.recordFailure();
+                    listener.onError(e);
+                    future.completeExceptionally(e);
+                } catch (Exception e) {
+                    circuitBreaker.recordFailure();
+                    SynapseException ex = new SynapseException("Streaming request failed", e,
+                            SynapseException.ExceptionType.STREAMING_ERROR);
+                    listener.onError(ex);
+                    future.completeExceptionally(ex);
+                } finally {
+                    concurrencyLimiter.release();
+                }
+            });
+
+            return new StreamHandle(token, future);
         } catch (Exception e) {
-            throw metricsCollector.recordFailureAndThrow(startTime,
-                    "Streaming request failed", e, SynapseException.ExceptionType.STREAMING_ERROR);
+            concurrencyLimiter.release();
+            throw e;
         }
     }
 
-    /**
-     * Sends a raw JSON request body to the specified model and streams the response chunks
-     * via the provided callback.
-     *
-     * <p>This overload allows overriding the default model configured in {@link SynapseConfig}.
-     * The model field in the request body is replaced with the specified model name before sending.</p>
-     *
-     * @param requestBody the raw JSON string to send as the request body;
-     *                    must not be {@code null}
-     * @param onChunk     the {@link Consumer} callback that receives each text chunk from the
-     *                    streaming response; must not be {@code null}
-     * @param modelName   the model identifier to use, overriding the configured default;
-     *                    must not be {@code null}
-     * @throws SynapseException if the streaming request fails,
-     *                          or if the hub has been closed
-     * @since 1.0.0
-     */
     @Override
-    public void streamCompletion(String requestBody, Consumer<String> onChunk, String modelName) throws SynapseException {
+    public Flow.Publisher<String> streamCompletionAsFlow(String requestBody) throws SynapseException {
         checkNotClosed();
-        String overriddenBody = requestBuilder.replaceModelInBody(requestBody, modelName);
-        streamCompletion(overriddenBody, onChunk);
+        FlowPublisher<String> publisher = new FlowPublisher<>();
+        CancellationToken token = new CancellationToken();
+
+        asyncExecutor.submit(() -> {
+            try {
+                String url = requestBuilder.buildUrl();
+                HttpRequest request = requestBuilder.buildPostRequest(url, requestBody);
+                streamHandler.handleAsFlow(request, publisher, token, config.isEnableLogging());
+            } catch (Exception e) {
+                publisher.fail(e);
+            }
+        });
+
+        return publisher;
     }
 
-    /**
-     * Retrieves the list of available models from the LLM API endpoint.
-     *
-     * <p>Sends a GET request to the {@code /v1/models} endpoint (relative to the configured
-     * base URL) and returns the parsed list of {@link Model} objects. The base URL is
-     * automatically adjusted: if it already ends with {@code /v1}, only {@code /models}
-     * is appended; otherwise {@code /v1/models} is appended.</p>
-     *
-     * @return a {@link List} of {@link Model} objects representing available models;
-     *         never {@code null} but may be empty
-     * @throws SynapseException if the request fails, returns a non-2xx status,
-     *                          or if the response cannot be parsed
-     * @since 1.0.0
-     * @see Model
-     */
     @Override
-    public List<Model> getModelsList() throws SynapseException {
+    public Flow.Publisher<String> streamPromptAsFlow(String prompt) throws SynapseException {
         checkNotClosed();
+        Map<String, Object> body = requestBuilder.buildMessagesBody(List.of(ChatMessage.user(prompt)), true);
+        String jsonBody = requestBuilder.serializeBody(body);
+        return streamCompletionAsFlow(jsonBody);
+    }
 
+    @Override
+    public List<Model> getModelsList() {
+        checkNotClosed();
         String cleanUrl = config.getBaseUrl().replaceAll("/+$", "");
         String baseUrl = cleanUrl.endsWith("/v1") ? cleanUrl + "/models" : cleanUrl + "/v1/models";
 
@@ -454,7 +321,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
                 () -> httpClient.send(request));
         HttpResponse<String> response = timed.value();
         long latencyMs = System.currentTimeMillis() - timed.startTime();
-        log(Level.FINE, "Models list fetched in " + latencyMs + "ms with status " + response.statusCode());
+        log.debug("[Synapse] Models list fetched in {}ms with status {}", latencyMs, response.statusCode());
 
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             metricsCollector.recordFailure(timed.startTime());
@@ -462,96 +329,56 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         }
 
         metricsCollector.recordSuccess(timed.startTime());
-        return parseModels(response.body());
+        return responseParser.parseModels(response.body());
     }
 
-
-    private List<Model> parseModels(String responseBody) throws SynapseException {
-        try {
-            JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode data = root.path("data");
-            List<Model> models = new java.util.ArrayList<>();
-            for (JsonNode node : data) {
-                Model model = Model.builder()
-                        .id(node.path("id").asText(null))
-                        .object(node.path("object").asText(null))
-                        .created(node.path("created").asLong(0))
-                        .ownedBy(node.path("owned_by").asText(null))
-                        .build();
-                models.add(model);
-            }
-            return models;
-        } catch (Exception e) {
-            throw new SynapseException("Failed to parse models response", e,
-                    SynapseException.ExceptionType.PARSE_ERROR);
-        }
-    }
-    /**
-     * Executes the given request body through the retry handler with the specified streaming mode.
-     *
-     * @param requestBody the JSON request body to send
-     * @param streaming   {@code true} if the request is a streaming request;
-     *                    {@code false} otherwise
-     * @return the {@link SynapseResponse} containing the model's response
-     * @throws SynapseException if all retry attempts are exhausted or the request is non-retryable
-     * @since 1.0.0
-     */
-    private SynapseResponse executeWithRetry(String requestBody, boolean streaming)
-            throws SynapseException {
+    private SynapseResponse executeWithRetry(String requestBody, boolean streaming) throws SynapseException {
         return retryHandler.executeWithRetry(() -> executeRequest(requestBody, streaming));
     }
 
-    /**
-     * Executes a single HTTP request to the LLM endpoint, including request interceptor
-     * invocation, response parsing, metrics recording, and response interceptor notification.
-     *
-     * @param requestBody the JSON request body to send
-     * @param streaming   {@code true} if the request is a streaming request;
-     *                    {@code false} otherwise
-     * @return the {@link SynapseResponse} containing the model's response and usage metadata
-     * @throws SynapseException if the HTTP request fails, returns a non-2xx status,
-     *                          or if response parsing fails
-     * @since 1.0.0
-     */
-    private SynapseResponse executeRequest(String requestBody, boolean streaming)
-            throws SynapseException {
-        String url = requestBuilder.buildUrl();
-        SynapseRequestContext reqCtx = buildRequestContext(url, requestBody, streaming);
-
-        notify(config.getRequestInterceptor(), SynapseRequestInterceptor::beforeRequest, reqCtx);
-
-        HttpRequest request = requestBuilder.buildPostRequest(reqCtx.getUrl(), reqCtx.getBody());
-        TimedResult<HttpResponse<String>> timed = executeWithTiming("Request to: " + url,
-                () -> httpClient.send(request));
-        HttpResponse<String> response = timed.value();
-
-        SynapseResponseContext resCtx = buildResponseContext(response, timed.startTime());
-        notify(config.getResponseInterceptor(), SynapseResponseInterceptor::beforeResponse, resCtx);
-
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            SynapseException ex = new SynapseException(response.statusCode(), response.body());
-            notifyError(reqCtx, resCtx, ex);
-            metricsCollector.recordFailure(timed.startTime());
-            throw ex;
+    private SynapseResponse executeRequest(String requestBody, boolean streaming) throws SynapseException {
+        circuitBreaker.allowRequest();
+        try {
+            concurrencyLimiter.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SynapseException("Request interrupted while waiting for concurrency slot",
+                    e, SynapseException.ExceptionType.CONFIG_ERROR);
         }
+        try {
+            String url = requestBuilder.buildUrl();
+            SynapseRequestContext reqCtx = buildRequestContext(url, requestBody, streaming);
 
-        SynapseResponse synapseResponse = responseParser.parse(response.body());
-        metricsCollector.recordSuccess(timed.startTime(),
-                synapseResponse.getPromptTokens(), synapseResponse.getCompletionTokens());
+            notify(config.getRequestInterceptor(), SynapseRequestInterceptor::beforeRequest, reqCtx);
 
-        notifyComplete(reqCtx, resCtx);
+            HttpRequest request = requestBuilder.buildPostRequest(reqCtx.getUrl(), reqCtx.getBody());
+            TimedResult<HttpResponse<String>> timed = executeWithTiming("Request to: " + url,
+                    () -> httpClient.send(request));
+            HttpResponse<String> response = timed.value();
 
-        return synapseResponse;
+            SynapseResponseContext resCtx = buildResponseContext(response, timed.startTime());
+            notify(config.getResponseInterceptor(), SynapseResponseInterceptor::beforeResponse, resCtx);
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                circuitBreaker.recordFailure();
+                SynapseException ex = new SynapseException(response.statusCode(), response.body());
+                notifyError(reqCtx, resCtx, ex);
+                metricsCollector.recordFailure(timed.startTime());
+                throw ex;
+            }
+
+            SynapseResponse synapseResponse = responseParser.parse(response.body());
+            circuitBreaker.recordSuccess();
+            metricsCollector.recordSuccess(timed.startTime(),
+                    synapseResponse.getPromptTokens(), synapseResponse.getCompletionTokens());
+
+            notifyComplete(reqCtx, resCtx);
+            return synapseResponse;
+        } finally {
+            concurrencyLimiter.release();
+        }
     }
 
-    /**
-     * Checks that this {@code SynapseHub} instance has not been closed.
-     * If it has been closed, a {@link SynapseException} with type
-     * {@link SynapseException.ExceptionType#CONFIG_ERROR} is thrown.
-     *
-     * @throws SynapseException if this hub has been closed via {@link #close()}
-     * @since 1.0.0
-     */
     private void checkNotClosed() throws SynapseException {
         if (closed) {
             throw new SynapseException("SynapseHub is closed",
@@ -589,65 +416,22 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private record TimedResult<T>(T value, long startTime) {}
 
     private <T> TimedResult<T> executeWithTiming(String logMessage, Supplier<T> action) {
-        log(Level.FINE, logMessage);
+        log.debug("[Synapse] {}", logMessage);
         long start = System.currentTimeMillis();
         return new TimedResult<>(action.get(), start);
     }
 
-    private TimedResult<Void> runWithTiming(String logMessage, Runnable action) {
-        log(Level.FINE, logMessage);
-        long start = System.currentTimeMillis();
-        action.run();
-        return new TimedResult<>(null, start);
-    }
-
-    /**
-     * Logs a message at the specified level if logging is enabled in the configuration.
-     * Messages are prefixed with {@code [Synapse]} for easy identification.
-     *
-     * @param level   the {@link Level} at which to log the message
-     * @param message the message to log
-     * @since 1.0.0
-     */
-    private void log(Level level, String message) {
-        if (config.isEnableLogging()) {
-            LOGGER.log(level, "[Synapse] " + message);
-        }
-    }
-
-    /**
-     * Returns the {@link SynapseMetrics} instance associated with this hub,
-     * providing access to request metrics such as success/failure counts,
-     * latency, and token usage.
-     *
-     * @return the {@link SynapseMetrics} instance; never {@code null}
-     * @since 1.0.0
-     */
     public SynapseMetrics getMetrics() {
         return metrics;
     }
 
-    /**
-     * Closes this {@code SynapseHub} instance, marking it as no longer usable.
-     *
-     * <p>After calling this method, all subsequent attempts to send requests
-     * will throw {@link SynapseException}. This method is idempotent and
-     * safe to call multiple times.</p>
-     *
-     * @since 1.0.0
-     */
     @Override
     public void close() {
         closed = true;
-        log(Level.FINE, "SynapseHub closed");
+        asyncExecutor.shutdownNow();
+        log.info("[Synapse] Hub closed");
     }
 
-    /**
-     * Returns the {@link SynapseConfig} used to initialize this hub.
-     *
-     * @return the configuration; never {@code null}
-     * @since 1.0.0
-     */
     public SynapseConfig getConfig() {
         return config;
     }

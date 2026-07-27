@@ -178,4 +178,19 @@ public class SynapseRequestContext {
     public String getModel() {
         return model;
     }
+
+    @Override
+    public String toString() {
+        java.util.Map<String, String> maskedHeaders = new java.util.HashMap<>();
+        for (java.util.Map.Entry<String, String> e : headers.entrySet()) {
+            String key = e.getKey();
+            if (key.toLowerCase().contains("key") || key.equalsIgnoreCase("authorization")) {
+                maskedHeaders.put(key, "***REDACTED***");
+            } else {
+                maskedHeaders.put(key, e.getValue());
+            }
+        }
+        return "SynapseRequestContext{url='" + url + "', streaming=" + streaming
+                + ", model='" + model + "', headers=" + maskedHeaders + "}";
+    }
 }

@@ -11,6 +11,10 @@
 
 	<artifactId>synapse-spring-boot-starter</artifactId>
 	<name>Synapse Spring Boot Starter</name>
+
+	<properties>
+		<automatic.module.name>org.abhi.synapse.spring</automatic.module.name>
+	</properties>
 	<description>Spring Boot auto-configuration</description>
 
 	<dependencies>
@@ -41,6 +45,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-configuration-processor</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-core</artifactId>
 			<optional>true</optional>
 		</dependency>
 	</dependencies>
