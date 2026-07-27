@@ -39,7 +39,7 @@ function FlowNode({ step, delay, small }: { step: FlowStep; delay: number; small
       whileInView={{ opacity: 1, x: 0 }}
       viewport={{ once: true }}
       transition={{ delay, duration: 0.3 }}
-      className={`${small ? 'px-3 py-2' : 'px-4 py-3'} rounded-lg ${step.color} border ${step.border} backdrop-blur-sm`}
+      className={`${small ? 'px-3 py-2' : 'px-4 py-3'} rounded-lg ${step.color} border ${step.borderColor} backdrop-blur-sm`}
     >
       <div className="flex items-center gap-2">
         <div className={`w-1.5 h-1.5 rounded-full ${step.iconColor.replace('text-', 'bg-')}`} />
