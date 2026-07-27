@@ -28,13 +28,20 @@ const navItems: NavItem[] = [
 const configBuilderMethods = [
   { name: 'baseUrl', type: 'String', description: 'Base URL of the LLM API provider' },
   { name: 'endpoint', type: 'String', description: 'API endpoint path' },
-  { name: 'apiKey', type: 'String', description: 'Authentication API key' },
-  { name: 'modelName', type: 'String', description: 'Model identifier' },
+  { name: 'apiKey', type: 'String', description: 'Authentication API key (redacted in toString)' },
+  { name: 'modelName', type: 'String', description: 'Default model identifier' },
   { name: 'temperature', type: 'double', description: 'Sampling temperature (0.0 - 2.0)' },
   { name: 'maxTokens', type: 'int', description: 'Maximum tokens in response' },
-  { name: 'timeout', type: 'Duration', description: 'Request timeout duration' },
+  { name: 'connectTimeout', type: 'Duration', description: 'TCP connect timeout' },
+  { name: 'readTimeout', type: 'Duration', description: 'Read/response timeout' },
+  { name: 'requestTimeout', type: 'Duration', description: 'Overall request deadline' },
+  { name: 'streamIdleTimeout', type: 'Duration', description: 'Idle timeout for streaming' },
   { name: 'maxRetries', type: 'int', description: 'Maximum retry attempts' },
-  { name: 'retryDelay', type: 'Duration', description: 'Delay between retries' },
+  { name: 'retryDelay', type: 'Duration', description: 'Base delay between retries' },
+  { name: 'maxRetryElapsedTime', type: 'Duration', description: 'Max total time for retries' },
+  { name: 'maxConcurrentRequests', type: 'int', description: 'Semaphore permits for concurrency' },
+  { name: 'circuitBreakerFailureThreshold', type: 'int', description: 'Failures before circuit opens' },
+  { name: 'circuitBreakerOpenDuration', type: 'Duration', description: 'How long circuit stays open' },
   { name: 'enableLogging', type: 'boolean', description: 'Enable request/response logging' },
   { name: 'requestInterceptor', type: 'SynapseRequestInterceptor', description: 'Request interceptor' },
   { name: 'responseInterceptor', type: 'SynapseResponseInterceptor', description: 'Response interceptor' },
@@ -51,6 +58,9 @@ ChatMessage user = ChatMessage.user("Explain quantum computing.");
 // Assistant message (for context)
 ChatMessage assistant = ChatMessage.assistant("Quantum computing uses...");
 
+// Tool result message (for tool calling)
+ChatMessage toolResult = ChatMessage.tool("call_123", "get_weather", "{\\"temp\\": 72}");
+
 // Build a conversation
 List<ChatMessage> messages = List.of(
     system,
@@ -59,46 +69,49 @@ List<ChatMessage> messages = List.of(
     ChatMessage.user("Tell me more about qubits.")
 );`
 
-const responseGettersCode = `SynapseResponse response = hub.sendPrompt("Hello");
+const responseGettersCode = `SynapseResponse response = hub.sendPrompt("Hello", null);
 
-// Get the response content
+// Core fields
 String content = response.getContent();
-
-// Get model used
 String model = response.getModel();
-
-// Token usage
 int promptTokens = response.getPromptTokens();
 int completionTokens = response.getCompletionTokens();
 int totalTokens = promptTokens + completionTokens;
+String finishReason = response.getFinishReason();
 
-// Finish reason
-String finishReason = response.getFinishReason();`
+// Metadata
+String correlationId = response.getCorrelationId();
+String provider = response.getProvider();
+List<ToolCall> toolCalls = response.getToolCalls();
+String responseFormat = response.getResponseFormat();`
 
 const interceptorInterfaceCode = `// Request Interceptor
 public interface SynapseRequestInterceptor {
-    void beforeRequest(SynapseRequestContext ctx);
-    void afterRequest(SynapseRequestContext ctx);
-    void onError(SynapseRequestContext ctx, SynapseException error);
+    default void beforeRequest(SynapseRequestContext ctx) {}
+    default void afterRequest(SynapseRequestContext ctx) {}
+    default void onError(SynapseRequestContext ctx, SynapseException error) {}
 }
 
 // Response Interceptor
 public interface SynapseResponseInterceptor {
-    void onResponse(SynapseResponseContext ctx);
-    void onError(SynapseResponseContext ctx, SynapseException error);
+    default void beforeResponse(SynapseResponseContext ctx) {}
+    default void afterResponse(SynapseResponseContext ctx) {}
+    default void onError(SynapseResponseContext ctx, SynapseException error) {}
 }`
 
 const retryPolicyInterfaceCode = `public interface SynapseRetryPolicy {
-    boolean shouldRetry(int attempt, SynapseException error);
-    long getDelay(int attempt);
-    int getMaxRetries();
+    default boolean shouldRetry(int attempt, SynapseException error);
+    default long getDelay(int attempt, SynapseException exception,
+                          Map<String, List<String>> responseHeaders);
+    default int getMaxRetries();
+    default Duration getRetryDelay();
+    default Duration getMaxRetryElapsedTime();
 }`
 
 const metricsListenerInterfaceCode = `public interface SynapseMetricsListener {
-    void onRequestStarted(String requestId);
-    void onRequestCompleted(String requestId, long latencyMs);
-    void onRequestFailed(String requestId, SynapseException error);
-    void onTokensUsed(String requestId, int promptTokens, int completionTokens);
+    default void onRequestStarted(String model) {}
+    default void onRequestCompleted(SynapseMetricsSummary summary) {}
+    default void onRequestFailed(SynapseMetricsSummary summary, SynapseException error) {}
 }`
 
 export default function ApiReferencePage() {
@@ -107,68 +120,84 @@ export default function ApiReferencePage() {
 
   const methodExamples: Record<string, string> = {
     'sendPrompt': `SynapseResponse response = hub.sendPrompt(
-    "What is the capital of France?"
+    "What is the capital of France?", null
 );
-System.out.println(response.getContent());`,
-    'sendPrompt(modelName)': `// Override the default model for this request
-SynapseResponse response = hub.sendPrompt(
-    "What is the capital of France?", "gpt-3.5-turbo"
-);
-System.out.println(response.getContent());`,
+System.out.println(response.getContent());
+System.out.println("Correlation: " + response.getCorrelationId());`,
     'sendChat': `List<ChatMessage> messages = List.of(
     ChatMessage.system("You are a helpful assistant."),
     ChatMessage.user("Explain quantum computing.")
 );
-SynapseResponse response = hub.sendChat(messages);
+SynapseResponse response = hub.sendChat(messages, null);
 System.out.println(response.getContent());`,
-    'sendChat(modelName)': `List<ChatMessage> messages = List.of(
-    ChatMessage.system("You are a helpful assistant."),
-    ChatMessage.user("Explain quantum computing.")
+    'sendPromptAsync': `// Non-blocking async call
+CompletableFuture<SynapseResponse> future =
+    hub.sendPromptAsync("What is Java?", null);
+future.thenAccept(response -> {
+    System.out.println(response.getContent());
+});`,
+    'sendChatAsync': `List<ChatMessage> messages = List.of(
+    ChatMessage.system("You are helpful."),
+    ChatMessage.user("What is Java?")
 );
-// Override the default model for this request
-SynapseResponse response = hub.sendChat(messages, "gpt-3.5-turbo");
-System.out.println(response.getContent());`,
-    'chatCompletion': `SynapseResponse response = hub.chatCompletion(
-    "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Hello\\"}]}"
-);
-System.out.println(response.getContent());`,
-    'chatCompletion(modelName)': `// The model field in the body is replaced with the specified model
+CompletableFuture<SynapseResponse> future =
+    hub.sendChatAsync(messages, null);
+future.thenAccept(r -> System.out.println(r.getContent()));`,
+    'chatCompletion': `// Raw JSON escape hatch
 SynapseResponse response = hub.chatCompletion(
-    "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Hello\\"}]}", 
-    "gpt-3.5-turbo"
+    "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Hello\\"}]}",
+    null
 );
 System.out.println(response.getContent());`,
-    'streamPrompt': `hub.streamPrompt("Write a poem about coding", chunk -> {
-    System.out.print(chunk);
-});`,
-    'streamPrompt(modelName)': `// Override the default model for streaming
-hub.streamPrompt("Write a poem about coding", chunk -> {
-    System.out.print(chunk);
-}, "gpt-3.5-turbo");`,
-    'streamChat': `hub.streamChat(messages, chunk -> {
-    System.out.print(chunk);
-});`,
-    'streamChat(modelName)': `// Override the default model for streaming
-hub.streamChat(messages, chunk -> {
-    System.out.print(chunk);
-}, "gpt-3.5-turbo");`,
-    'streamCompletion': `hub.streamCompletion(
+    'streamPrompt': `// Stream with StreamListener callbacks
+StreamHandle handle = hub.streamPrompt(
+    "Write a poem about coding",
+    StreamListener.of(chunk -> System.out.print(chunk))
+);
+// Cancel mid-stream if needed:
+// handle.cancel();
+// Or await full response:
+// SynapseResponse full = handle.getFuture().join();`,
+    'streamChat': `List<ChatMessage> messages = List.of(
+    ChatMessage.user("Write a haiku about Java")
+);
+StreamHandle handle = hub.streamChat(messages,
+    StreamListener.of(chunk -> System.out.print(chunk))
+);`,
+    'streamCompletion': `// Raw JSON streaming escape hatch
+StreamHandle handle = hub.streamCompletion(
     "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Tell me a joke\\"}], \\"stream\\": true}",
-    chunk -> {
+    StreamListener.of(chunk -> System.out.print(chunk))
+);`,
+    'streamChatAsFlow': `// Reactive Flow.Publisher for integration with
+// Reactor, RxJava, or any Flow.Subscriber
+Flow.Publisher<String> publisher =
+    hub.streamChatAsFlow(messages);
+publisher.subscribe(new Flow.Subscriber<>() {
+    public void onSubscribe(Flow.Subscription s) {
+        s.request(Long.MAX_VALUE);
+    }
+    public void onNext(String chunk) {
         System.out.print(chunk);
     }
-);`,
-    'streamCompletion(modelName)': `// Override the default model for streaming
-hub.streamCompletion(
-    "{\\"model\\": \\"gpt-4\\", \\"messages\\": [{\\"role\\": \\"user\\", \\"content\\": \\"Tell me a joke\\"}], \\"stream\\": true}",
-    chunk -> {
+    public void onError(Throwable t) {}
+    public void onComplete() {}
+});`,
+    'streamPromptAsFlow': `Flow.Publisher<String> publisher =
+    hub.streamPromptAsFlow("Write a joke");
+publisher.subscribe(new Flow.Subscriber<>() {
+    public void onSubscribe(Flow.Subscription s) {
+        s.request(Long.MAX_VALUE);
+    }
+    public void onNext(String chunk) {
         System.out.print(chunk);
-    },
-    "gpt-3.5-turbo"
-);`,
+    }
+    public void onError(Throwable t) {}
+    public void onComplete() {}
+});`,
     'getModelsList': `List<Model> models = hub.getModelsList();
 for (Model model : models) {
-    System.out.printf("Model: %s (owned by: %s)%n", 
+    System.out.printf("Model: %s (owned by: %s)%n",
         model.getId(), model.getOwnedBy());
 }`,
   }
@@ -232,28 +261,28 @@ for (Model model : models) {
                   </div>
                   <div className="divide-y divide-gray-800/50">
                     {apiMethods.map((method, idx) => {
-                      const hasModelOverload = method.signature.includes('String modelName');
-                      const exampleKey = hasModelOverload ? `${method.method}(modelName)` : method.method;
-                      const badgeLabel = method.method === 'getModelsList' ? 'List<Model>' : 
+                      const badgeLabel = method.signature.includes('-> StreamHandle') ? 'StreamHandle' :
+                        method.signature.includes('-> CompletableFuture') ? 'CompletableFuture' :
+                        method.signature.includes('-> Flow.Publisher') ? 'Flow.Publisher' :
                         method.signature.includes('-> SynapseResponse') ? 'SynapseResponse' :
+                        method.signature.includes('-> List<Model>') ? 'List<Model>' :
                         method.signature.includes('void') ? 'void' : '';
                       return (
                         <div key={`${method.method}-${idx}`}>
                           <button
-                            onClick={() => setExpandedMethod(expandedMethod === exampleKey ? null : exampleKey)}
+                            onClick={() => setExpandedMethod(expandedMethod === method.method ? null : method.method)}
                             className="w-full px-4 py-3 flex items-center gap-4 hover:bg-gray-800/30 transition-colors text-left"
                           >
                             <span className="font-mono text-synapse-400 text-sm min-w-[140px]">{method.method}</span>
                             <span className="font-mono text-gray-300 text-xs flex-1 truncate">{method.signature}</span>
-                            {hasModelOverload && <Badge variant="blue">override</Badge>}
                             <ChevronRight
                               className={`w-4 h-4 text-gray-500 transition-transform ${
-                                expandedMethod === exampleKey ? 'rotate-90' : ''
+                                expandedMethod === method.method ? 'rotate-90' : ''
                               }`}
                             />
                           </button>
                           <AnimatePresence>
-                            {expandedMethod === exampleKey && (
+                            {expandedMethod === method.method && (
                               <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
@@ -263,7 +292,7 @@ for (Model model : models) {
                               >
                                 <div className="px-4 pb-4">
                                   <p className="text-sm text-gray-400 mb-3">{method.description}</p>
-                                  <CodeBlock code={methodExamples[exampleKey] || ''} title={`${method.method} example`} />
+                                  <CodeBlock code={methodExamples[method.method] || ''} title={`${method.method} example`} />
                                 </div>
                               </motion.div>
                             )}
@@ -385,6 +414,7 @@ for (Model model : models) {
                       { method: 'system(String content)', description: 'Creates a system message for setting assistant behavior', badge: 'blue' as const },
                       { method: 'user(String content)', description: 'Creates a user message from human input', badge: 'green' as const },
                       { method: 'assistant(String content)', description: 'Creates an assistant message for context', badge: 'purple' as const },
+                      { method: 'tool(String toolCallId, String name, String content)', description: 'Creates a tool result message for tool calling', badge: 'blue' as const },
                     ].map((item) => (
                       <div key={item.method} className="px-4 py-3 flex items-center gap-4">
                         <span className="font-mono text-synapse-400 text-sm min-w-[220px]">{item.method}</span>
@@ -472,6 +502,10 @@ for (Model model : models) {
                       { method: 'getPromptTokens()', type: 'int', description: 'Number of tokens in the prompt' },
                       { method: 'getCompletionTokens()', type: 'int', description: 'Number of tokens in the completion' },
                       { method: 'getFinishReason()', type: 'String', description: 'Why generation stopped (stop, length, etc.)' },
+                      { method: 'getCorrelationId()', type: 'String', description: 'Unique ID for tracing this request' },
+                      { method: 'getProvider()', type: 'String', description: 'Provider that handled the request' },
+                      { method: 'getToolCalls()', type: 'List<ToolCall>', description: 'Tool calls requested by the model' },
+                      { method: 'getResponseFormat()', type: 'String', description: 'Response format (e.g. JSON schema)' },
                     ].map((item) => (
                       <div key={item.method} className="px-4 py-3 flex items-center gap-4">
                         <span className="font-mono text-synapse-400 text-sm min-w-[200px]">{item.method}</span>
@@ -623,8 +657,10 @@ for (Model model : models) {
                   <div className="divide-y divide-gray-800/50">
                     {[
                       { method: 'shouldRetry(int attempt, SynapseException error)', type: 'boolean', description: 'Determine if retry should occur' },
-                      { method: 'getDelay(int attempt)', type: 'long', description: 'Delay in ms before next retry' },
+                      { method: 'getDelay(int attempt, SynapseException exc, Map<String, List<String>> headers)', type: 'long', description: 'Delay in ms, parses Retry-After header' },
                       { method: 'getMaxRetries()', type: 'int', description: 'Maximum number of retry attempts' },
+                      { method: 'getRetryDelay()', type: 'Duration', description: 'Base delay between retries' },
+                      { method: 'getMaxRetryElapsedTime()', type: 'Duration', description: 'Max total time for retry loop' },
                     ].map((item) => (
                       <div key={item.method} className="px-4 py-3 flex items-center gap-4">
                         <span className="font-mono text-synapse-400 text-sm min-w-[320px]">{item.method}</span>
@@ -662,10 +698,9 @@ for (Model model : models) {
                   </div>
                   <div className="divide-y divide-gray-800/50">
                     {[
-                      { method: 'onRequestStarted(String requestId)', description: 'Called when a request begins' },
-                      { method: 'onRequestCompleted(String requestId, long latencyMs)', description: 'Called on successful completion' },
-                      { method: 'onRequestFailed(String requestId, SynapseException error)', description: 'Called on request failure' },
-                      { method: 'onTokensUsed(String requestId, int promptTokens, int completionTokens)', description: 'Called with token usage data' },
+                      { method: 'onRequestStarted(String model)', description: 'Called when a request begins, with target model' },
+                      { method: 'onRequestCompleted(SynapseMetricsSummary summary)', description: 'Called on successful completion with metrics summary' },
+                      { method: 'onRequestFailed(SynapseMetricsSummary summary, SynapseException error)', description: 'Called on request failure with partial metrics' },
                     ].map((item) => (
                       <div key={item.method} className="px-4 py-3 flex items-center gap-4">
                         <span className="font-mono text-synapse-400 text-sm min-w-[380px]">{item.method}</span>

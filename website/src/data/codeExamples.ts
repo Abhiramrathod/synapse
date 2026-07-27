@@ -7,7 +7,6 @@ import java.util.List;
 
 public class QuickStart {
     public static void main(String[] args) {
-        // Build configuration
         SynapseConfig config = SynapseConfig.builder()
                 .baseUrl("https://api.openai.com")
                 .endpoint("/v1/chat/completions")
@@ -17,11 +16,10 @@ public class QuickStart {
                 .maxTokens(1024)
                 .build();
 
-        // Create hub and send prompts
         try (SynapseHub hub = new SynapseHub(config)) {
-            // Simple prompt
+            // One-shot prompt
             SynapseResponse response = hub.sendPrompt(
-                "What is the capital of France?"
+                "What is the capital of France?", null
             );
             System.out.println(response.getContent());
 
@@ -30,22 +28,41 @@ public class QuickStart {
                 ChatMessage.system("You are a helpful assistant."),
                 ChatMessage.user("Explain quantum computing.")
             );
-            SynapseResponse chat = hub.sendChat(messages);
+            SynapseResponse chat = hub.sendChat(messages, null);
             System.out.println(chat.getContent());
         }
     }
 }`
 
 export const streamingCode = `try (SynapseHub hub = new SynapseHub(config)) {
-    // Stream a prompt - tokens arrive in real-time
-    hub.streamPrompt("Write a poem about programming", chunk -> {
-        System.out.print(chunk);  // Prints each token as it arrives
-    });
+    // Stream with StreamListener — chunk, complete, error callbacks
+    StreamHandle handle = hub.streamPrompt(
+        "Write a poem about programming",
+        new StreamListener() {
+            @Override
+            public void onChunk(String text) {
+                System.out.print(text);
+            }
 
-    // Stream a multi-turn conversation
-    hub.streamChat(messages, chunk -> {
+            @Override
+            public void onComplete(SynapseResponse full) {
+                System.out.println("\\n--- Done ---");
+            }
+
+            @Override
+            public void onError(SynapseException e) {
+                System.err.println("Failed: " + e.getMessage());
+            }
+        }
+    );
+
+    // Cancel mid-stream if needed
+    // handle.cancel();
+
+    // Or use the Consumer adapter
+    hub.streamPrompt("Write a haiku", StreamListener.of(chunk -> {
         System.out.print(chunk);
-    });
+    }));
 }`
 
 export const springBootCode = `# application.yml
@@ -56,7 +73,9 @@ synapse:
   model-name: gpt-4
   temperature: 0.7
   max-tokens: 1024
-  timeout: 30s
+  connect-timeout: 5s
+  read-timeout: 30s
+  request-timeout: 60s
   max-retries: 3
   retry-delay: 500ms
   enable-logging: true`
@@ -71,34 +90,25 @@ public class LlmService {
     }
 
     public String askQuestion(String question) {
-        SynapseResponse response = synapseHub.sendPrompt(question);
+        SynapseResponse response = synapseHub.sendPrompt(question, null);
         return response.getContent();
-    }
-
-    public Stream<String> streamQuestion(String question) {
-        List<String> chunks = new ArrayList<>();
-        synapseHub.streamPrompt(question, chunks::add);
-        return chunks.stream();
     }
 }`
 
-export const interceptorCode = `public class LoggingInterceptor implements SynapseRequestInterceptor {
+export const interceptorCode = `public class TracingInterceptor implements SynapseRequestInterceptor {
 
     @Override
     public void beforeRequest(SynapseRequestContext ctx) {
-        System.out.println("Sending request to: " + ctx.getUrl());
-        System.out.println("Headers: " + ctx.getHeaders());
+        ctx.getHeaders().put("X-Request-Id",
+            UUID.randomUUID().toString());
     }
 
     @Override
-    public void afterRequest(SynapseRequestContext ctx) {
-        System.out.println("Request completed for: " + ctx.getUrl());
-    }
+    public void afterRequest(SynapseRequestContext ctx) { }
 
     @Override
-    public void onError(SynapseRequestContext ctx, SynapseException error) {
-        System.err.println("Request failed: " + error.getMessage());
-    }
+    public void onError(SynapseRequestContext ctx,
+                        SynapseException error) { }
 }`
 
 export const retryPolicyCode = `public class CustomRetryPolicy implements SynapseRetryPolicy {
@@ -110,8 +120,10 @@ export const retryPolicyCode = `public class CustomRetryPolicy implements Synaps
     }
 
     @Override
-    public long getDelay(int attempt) {
-        // Exponential backoff: 1s, 2s, 4s
+    public long getDelay(int attempt, SynapseException error,
+                          Map<String, List<String>> headers) {
+        // Uses Retry-After header if present, otherwise
+        // exponential backoff: 1s, 2s, 4s + jitter
         return 1000L * (long) Math.pow(2, attempt);
     }
 
@@ -128,38 +140,46 @@ export const fullConfigCode = `SynapseConfig config = SynapseConfig.builder()
         .modelName("gpt-4")
         .temperature(0.7)
         .maxTokens(2048)
-        .timeout(Duration.ofSeconds(30))
+        .connectTimeout(Duration.ofSeconds(5))
+        .readTimeout(Duration.ofSeconds(30))
+        .requestTimeout(Duration.ofSeconds(60))
+        .streamIdleTimeout(Duration.ofSeconds(30))
         .maxRetries(3)
         .retryDelay(Duration.ofMillis(500))
+        .maxRetryElapsedTime(Duration.ofSeconds(120))
+        .maxConcurrentRequests(64)
+        .circuitBreakerFailureThreshold(5)
+        .circuitBreakerOpenDuration(Duration.ofSeconds(30))
         .enableLogging(true)
-        .requestInterceptor(new LoggingInterceptor())
-        .responseInterceptor(new ResponseLogger())
+        .requestInterceptor(new TracingInterceptor())
+        .responseInterceptor(new MetricsInterceptor())
         .retryPolicy(new CustomRetryPolicy())
-        .metricsListener(new MetricsListener())
+        .metricsListener(new MicrometerListener())
         .build();`
 
 export const errorHandlingCode = `try {
-    SynapseResponse response = hub.sendPrompt("Hello");
+    SynapseResponse response = hub.sendPrompt("Hello", null);
 } catch (SynapseException e) {
     switch (e.getType()) {
         case RATE_LIMIT_ERROR:
-            // Handle rate limiting
             break;
         case SERVER_ERROR:
-            // Handle server errors
             break;
         case NETWORK_ERROR:
-            // Handle network issues
             break;
         case TIMEOUT_ERROR:
-            // Handle timeout
+            break;
+        case CIRCUIT_BREAKER_OPEN:
+            break;
+        case RETRY_EXHAUSTED:
+            break;
+        case STREAMING_ERROR:
             break;
         default:
-            // Handle other errors
+            break;
     }
-
     if (e.isRetryable()) {
-        // Automatically retried based on retry policy
+        // Automatically retried by framework
     }
 }`
 
@@ -169,16 +189,16 @@ export const mavenXml = `<!-- JitPack Repository -->
     <url>https://jitpack.io</url>
 </repository>
 
-<!-- Pure Java -->
+<!-- Pure Java (all modules) -->
 <dependency>
     <groupId>com.github.Abhiramrathod</groupId>
     <artifactId>synapse-all</artifactId>
-    <version>v1.0.4</version>
+    <version>TAG</version>
 </dependency>
 
 <!-- Spring Boot Starter -->
 <dependency>
     <groupId>com.github.Abhiramrathod</groupId>
     <artifactId>synapse-spring-boot-starter</artifactId>
-    <version>v1.0.4</version>
+    <version>TAG</version>
 </dependency>`

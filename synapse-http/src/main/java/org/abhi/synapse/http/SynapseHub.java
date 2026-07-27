@@ -89,27 +89,18 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     }
 
     @Override
-    public SynapseResponse sendPrompt(String prompt) throws SynapseException {
-        checkNotClosed();
-        return sendChat(List.of(ChatMessage.user(prompt)));
-    }
-
-    @Override
-    public SynapseResponse sendPrompt(String prompt, String modelName) throws SynapseException {
-        checkNotClosed();
-        return sendChat(List.of(ChatMessage.user(prompt)), modelName);
-    }
-
-    @Override
     public SynapseResponse sendPrompt(String prompt, RequestOptions options) throws SynapseException {
         checkNotClosed();
         return sendChat(List.of(ChatMessage.user(prompt)), options);
     }
 
     @Override
-    public CompletableFuture<SynapseResponse> sendPromptAsync(String prompt) throws SynapseException {
+    public SynapseResponse sendChat(List<ChatMessage> messages, RequestOptions options) throws SynapseException {
         checkNotClosed();
-        return sendChatAsync(List.of(ChatMessage.user(prompt)));
+        String modelName = resolveModel(options);
+        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, false, modelName);
+        String jsonBody = requestBuilder.serializeBody(body);
+        return executeWithRetry(jsonBody, false);
     }
 
     @Override
@@ -119,65 +110,17 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     }
 
     @Override
-    public SynapseResponse sendChat(List<ChatMessage> messages) throws SynapseException {
-        checkNotClosed();
-        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, false);
-        String jsonBody = requestBuilder.serializeBody(body);
-        return executeWithRetry(jsonBody, false);
-    }
-
-    @Override
-    public SynapseResponse sendChat(List<ChatMessage> messages, String modelName) throws SynapseException {
-        checkNotClosed();
-        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, false, modelName);
-        String jsonBody = requestBuilder.serializeBody(body);
-        return executeWithRetry(jsonBody, false);
-    }
-
-    @Override
-    public SynapseResponse sendChat(List<ChatMessage> messages, RequestOptions options) throws SynapseException {
-        checkNotClosed();
-        String modelName = options != null && options.getModelName() != null ? options.getModelName() : config.getModelName();
-        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, false, modelName);
-        String jsonBody = requestBuilder.serializeBody(body);
-        return executeWithRetry(jsonBody, false);
-    }
-
-    @Override
-    public CompletableFuture<SynapseResponse> sendChatAsync(List<ChatMessage> messages) throws SynapseException {
-        checkNotClosed();
-        return CompletableFuture.supplyAsync(() -> sendChat(messages), asyncExecutor);
-    }
-
-    @Override
     public CompletableFuture<SynapseResponse> sendChatAsync(List<ChatMessage> messages, RequestOptions options) throws SynapseException {
         checkNotClosed();
         return CompletableFuture.supplyAsync(() -> sendChat(messages, options), asyncExecutor);
     }
 
     @Override
-    public SynapseResponse chatCompletion(String requestBody) throws SynapseException {
+    public SynapseResponse chatCompletion(String requestBody, RequestOptions options) throws SynapseException {
         checkNotClosed();
-        return executeWithRetry(requestBody, false);
-    }
-
-    @Override
-    public SynapseResponse chatCompletion(String requestBody, String modelName) throws SynapseException {
-        checkNotClosed();
+        String modelName = resolveModel(options);
         String overriddenBody = requestBuilder.replaceModelInBody(requestBody, modelName);
         return executeWithRetry(overriddenBody, false);
-    }
-
-    @Override
-    public void streamPrompt(String prompt, java.util.function.Consumer<String> onChunk) throws SynapseException {
-        checkNotClosed();
-        streamChat(List.of(ChatMessage.user(prompt)), onChunk);
-    }
-
-    @Override
-    public void streamPrompt(String prompt, java.util.function.Consumer<String> onChunk, String modelName) throws SynapseException {
-        checkNotClosed();
-        streamChat(List.of(ChatMessage.user(prompt)), onChunk, modelName);
     }
 
     @Override
@@ -187,38 +130,11 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     }
 
     @Override
-    public void streamChat(List<ChatMessage> messages, java.util.function.Consumer<String> onChunk) throws SynapseException {
-        checkNotClosed();
-        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true);
-        String jsonBody = requestBuilder.serializeBody(body);
-        streamCompletion(jsonBody, onChunk);
-    }
-
-    @Override
-    public void streamChat(List<ChatMessage> messages, java.util.function.Consumer<String> onChunk, String modelName) throws SynapseException {
-        checkNotClosed();
-        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true, modelName);
-        String jsonBody = requestBuilder.serializeBody(body);
-        streamCompletion(jsonBody, onChunk);
-    }
-
-    @Override
     public StreamHandle streamChat(List<ChatMessage> messages, StreamListener listener) throws SynapseException {
         checkNotClosed();
         Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true);
         String jsonBody = requestBuilder.serializeBody(body);
         return streamCompletion(jsonBody, listener);
-    }
-
-    @Override
-    public void streamCompletion(String requestBody, java.util.function.Consumer<String> onChunk) throws SynapseException {
-        streamCompletion(requestBody, StreamListener.of(onChunk));
-    }
-
-    @Override
-    public void streamCompletion(String requestBody, java.util.function.Consumer<String> onChunk, String modelName) throws SynapseException {
-        String overriddenBody = requestBuilder.replaceModelInBody(requestBody, modelName);
-        streamCompletion(overriddenBody, StreamListener.of(onChunk));
     }
 
     @Override
@@ -284,22 +200,11 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     }
 
     @Override
-    public Flow.Publisher<String> streamCompletionAsFlow(String requestBody) throws SynapseException {
+    public Flow.Publisher<String> streamChatAsFlow(List<ChatMessage> messages) throws SynapseException {
         checkNotClosed();
-        FlowPublisher<String> publisher = new FlowPublisher<>();
-        CancellationToken token = new CancellationToken();
-
-        asyncExecutor.submit(() -> {
-            try {
-                String url = requestBuilder.buildUrl();
-                HttpRequest request = requestBuilder.buildPostRequest(url, requestBody);
-                streamHandler.handleAsFlow(request, publisher, token, config.isEnableLogging());
-            } catch (Exception e) {
-                publisher.fail(e);
-            }
-        });
-
-        return publisher;
+        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, true);
+        String jsonBody = requestBuilder.serializeBody(body);
+        return streamCompletionAsFlow(jsonBody);
     }
 
     @Override
@@ -311,7 +216,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     }
 
     @Override
-    public List<Model> getModelsList() {
+    public List<Model> getModelsList() throws SynapseException {
         checkNotClosed();
         String cleanUrl = config.getBaseUrl().replaceAll("/+$", "");
         String baseUrl = cleanUrl.endsWith("/v1") ? cleanUrl + "/models" : cleanUrl + "/v1/models";
@@ -330,6 +235,12 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
 
         metricsCollector.recordSuccess(timed.startTime());
         return responseParser.parseModels(response.body());
+    }
+
+    private String resolveModel(RequestOptions options) {
+        return options != null && options.getModelName() != null
+                ? options.getModelName()
+                : config.getModelName();
     }
 
     private SynapseResponse executeWithRetry(String requestBody, boolean streaming) throws SynapseException {
@@ -377,6 +288,23 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         } finally {
             concurrencyLimiter.release();
         }
+    }
+
+    private Flow.Publisher<String> streamCompletionAsFlow(String requestBody) {
+        FlowPublisher<String> publisher = new FlowPublisher<>();
+        CancellationToken token = new CancellationToken();
+
+        asyncExecutor.submit(() -> {
+            try {
+                String url = requestBuilder.buildUrl();
+                HttpRequest request = requestBuilder.buildPostRequest(url, requestBody);
+                streamHandler.handleAsFlow(request, publisher, token, config.isEnableLogging());
+            } catch (Exception e) {
+                publisher.fail(e);
+            }
+        });
+
+        return publisher;
     }
 
     private void checkNotClosed() throws SynapseException {

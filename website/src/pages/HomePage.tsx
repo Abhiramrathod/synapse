@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowRight, Github, ChevronRight } from 'lucide-react'
+import { ArrowRight, Github } from 'lucide-react'
 import FadeIn from '../components/FadeIn'
 import CodeBlock from '../components/CodeBlock'
 import Badge from '../components/Badge'
 import WasmDemo from '../components/WasmDemo'
+import ArchitectureDiagram from '../components/ArchitectureDiagram'
+import RequestFlowDiagram from '../components/RequestFlowDiagram'
+import StreamingFlowDiagram from '../components/StreamingFlowDiagram'
 import { features, modules } from '../data/content'
 import { quickStartCode, streamingCode } from '../data/codeExamples'
 
@@ -28,7 +31,7 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <FadeIn delay={0.1}>
-                <Badge variant="blue">v1.0.4 — Now Available</Badge>
+                <Badge variant="blue">v2.0.0 — Now Available</Badge>
               </FadeIn>
 
               <FadeIn delay={0.2}>
@@ -129,74 +132,54 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 relative">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-4xl font-bold text-white">Modular Architecture</h2>
+              <h2 className="text-4xl font-bold text-white">How It Works</h2>
               <p className="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
-                Pick only what you need. Each module is focused and lightweight.
+                A layered architecture that separates concerns — your code only touches the interface.
+              </p>
+            </div>
+          </FadeIn>
+
+          <div className="grid lg:grid-cols-2 gap-8 items-start">
+            {/* Architecture Block Diagram */}
+            <FadeIn delay={0.1}>
+              <div className="glass-card p-6 rounded-2xl">
+                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-synapse-400" />
+                  Layered Architecture
+                </h3>
+                <ArchitectureDiagram />
+              </div>
+            </FadeIn>
+
+            {/* Request Flow Diagram */}
+            <FadeIn delay={0.2}>
+              <div className="glass-card p-6 rounded-2xl">
+                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400" />
+                  Request Flow
+                </h3>
+                <RequestFlowDiagram />
+              </div>
+            </FadeIn>
+          </div>
+        </div>
+      </section>
+
+      {/* Streaming Flow */}
+      <section className="py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          <FadeIn>
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-white">Streaming Flow</h2>
+              <p className="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+                Token-by-token delivery via SSE — with cancellation and error recovery built in.
               </p>
             </div>
           </FadeIn>
 
           <FadeIn delay={0.1}>
-            <div className="relative">
-              {/* Connection lines */}
-              <div className="absolute top-1/2 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gray-700/50 to-transparent hidden lg:block" />
-
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {modules.map((mod, i) => (
-                  <motion.div
-                    key={mod.name}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.08 }}
-                    className="relative p-5 rounded-2xl glass-card hover:border-gray-700/60 transition-all"
-                  >
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${mod.color} flex items-center justify-center flex-shrink-0`}>
-                        <mod.icon className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="text-white font-semibold text-sm truncate">{mod.name}</h3>
-                        <p className="text-gray-500 text-xs mt-0.5">{mod.description}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 ml-12">
-                      {mod.items.map((item) => (
-                        <span key={item} className="text-[11px] px-2 py-0.5 rounded-md bg-gray-800/60 text-gray-400 border border-gray-700/40">
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Simplified architecture diagram */}
-              <FadeIn delay={0.2}>
-                <div className="mt-12 p-8 rounded-2xl bg-gray-900/40 border border-gray-800/40">
-                  <div className="flex flex-col lg:flex-row items-center justify-center gap-6 text-sm">
-                    <div className="px-4 py-2.5 rounded-xl bg-synapse-600/10 border border-synapse-500/20 text-synapse-400 font-medium text-center">
-                      Your Code
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-600 rotate-90 lg:rotate-0" />
-                    <div className="px-4 py-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 font-medium text-center">
-                      synapse-core
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-600 rotate-90 lg:rotate-0" />
-                    <div className="px-4 py-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-medium text-center">
-                      synapse-config
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-600 rotate-90 lg:rotate-0" />
-                    <div className="px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 font-medium text-center">
-                      synapse-http
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-600 rotate-90 lg:rotate-0" />
-                    <div className="px-4 py-2.5 rounded-xl bg-gray-800/60 border border-gray-700/40 text-gray-400 font-medium text-center">
-                      LLM API
-                    </div>
-                  </div>
-                </div>
-              </FadeIn>
+            <div className="glass-card p-8 rounded-2xl max-w-4xl mx-auto">
+              <StreamingFlowDiagram />
             </div>
           </FadeIn>
         </div>

@@ -1,6 +1,7 @@
 package org.abhi.synapse.http;
 
 import org.abhi.synapse.config.SynapseConfig;
+import org.abhi.synapse.core.RequestOptions;
 import org.abhi.synapse.core.exception.SynapseException;
 import org.abhi.synapse.core.model.ChatMessage;
 import org.abhi.synapse.core.model.SynapseResponse;
@@ -56,7 +57,7 @@ class SynapseHubTest {
                         """)
                 .addHeader("Content-Type", "application/json"));
 
-        SynapseResponse response = hub.sendPrompt("Hi there");
+        SynapseResponse response = hub.sendPrompt("Hi there", null);
 
         assertThat(response.getContent()).isEqualTo("Hello!");
         assertThat(response.getModel()).isEqualTo("gpt-4");
@@ -81,7 +82,7 @@ class SynapseHubTest {
                 ChatMessage.system("You are helpful"),
                 ChatMessage.user("What is Java?")
         );
-        SynapseResponse response = hub.sendChat(messages);
+        SynapseResponse response = hub.sendChat(messages, null);
 
         assertThat(response.getContent()).isEqualTo("Java is a programming language.");
         assertThat(response.getPromptTokens()).isEqualTo(20);
@@ -94,7 +95,7 @@ class SynapseHubTest {
                 .setResponseCode(429)
                 .setBody("Rate limit exceeded"));
 
-        assertThatThrownBy(() -> hub.sendPrompt("test"))
+        assertThatThrownBy(() -> hub.sendPrompt("test", null))
                 .isInstanceOf(SynapseException.class)
                 .satisfies(e -> assertThat(((SynapseException) e).getStatusCode()).isEqualTo(429));
     }
@@ -105,7 +106,7 @@ class SynapseHubTest {
                 .setResponseCode(500)
                 .setBody("Internal Server Error"));
 
-        assertThatThrownBy(() -> hub.sendPrompt("test"))
+        assertThatThrownBy(() -> hub.sendPrompt("test", null))
                 .isInstanceOf(SynapseException.class)
                 .satisfies(e -> assertThat(((SynapseException) e).getStatusCode()).isEqualTo(500));
     }
@@ -113,7 +114,7 @@ class SynapseHubTest {
     @Test
     void hubRejectsRequestsAfterClose() {
         hub.close();
-        assertThatThrownBy(() -> hub.sendPrompt("test"))
+        assertThatThrownBy(() -> hub.sendPrompt("test", null))
                 .isInstanceOf(SynapseException.class)
                 .hasMessageContaining("closed");
     }
@@ -126,21 +127,22 @@ class SynapseHubTest {
                         """)
                 .addHeader("Content-Type", "application/json"));
 
-        CompletableFuture<SynapseResponse> future = hub.sendPromptAsync("Hello async");
+        CompletableFuture<SynapseResponse> future = hub.sendPromptAsync("Hello async", null);
         SynapseResponse response = future.get();
 
         assertThat(response.getContent()).isEqualTo("Async response");
     }
 
     @Test
-    void requestIdempotentOverModelName() throws Exception {
+    void modelOverrideViaRequestOptions() throws Exception {
         mockWebServer.enqueue(new MockResponse()
                 .setBody("""
                         {"id":"chatcmpl-4","object":"chat.completion","model":"gpt-3.5-turbo","choices":[{"index":0,"message":{"role":"assistant","content":"response"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}
                         """)
                 .addHeader("Content-Type", "application/json"));
 
-        SynapseResponse response = hub.sendPrompt("test", "gpt-3.5-turbo");
+        RequestOptions opts = RequestOptions.defaults().setModelName("gpt-3.5-turbo");
+        SynapseResponse response = hub.sendPrompt("test", opts);
         assertThat(response.getContent()).isEqualTo("response");
     }
 

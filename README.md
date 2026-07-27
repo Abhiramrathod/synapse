@@ -1,289 +1,357 @@
 # Synapse
 
-[![](https://jitpack.io/v/Abhiramrathod/synapse.svg)](https://jitpack.io/#Abhiramrathod/synapse)
+[![Maven Central](https://img.shields.io/maven-central/v/org.abhi/synapse-all)](https://central.sonatype.com/search?q=org.abhi)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Java 17+](https://img.shields.io/badge/Java-17+-green.svg)](https://adoptium.net/)
 
-A production-ready, multi-module Java library for seamless integration with any LLM API provider.
+A production-ready, provider-agnostic Java client for any LLM API. One unified interface for OpenAI, Anthropic, Cohere, and any OpenAI-compatible provider.
 
-## Overview
+## Why Synapse?
 
-Synapse provides a clean, extensible abstraction layer for interacting with Large Language Model APIs. Whether you're using OpenAI, Anthropic, Cohere, or any other provider, Synapse offers a unified interface with explicit control over synchronous and streaming operations.
-
-### Key Features
-
-- **Provider Agnostic** - Works with any LLM API that follows the OpenAI-compatible format
-- **Explicit Streaming** - Decide per-request whether to use `sendPrompt()` or `streamPrompt()`
-- **Modular Architecture** - Pick only what you need via focused Maven modules
-- **Interceptor Pattern** - Customize request/response handling with pluggable interceptors
-- **Automatic Retry** - Built-in exponential backoff with configurable retry policies
-- **Metrics Tracking** - Monitor latency, token usage, and request success rates
-- **Spring Boot Integration** - Auto-configuration for Spring Boot applications
+| Problem | Synapse Solution |
+|---------|-----------------|
+| Vendor lock-in | Provider SPI — swap providers with zero code changes |
+| No streaming control | `StreamListener` with chunk/complete/error callbacks + cancellation |
+| Brittle retry logic | Jittered exponential backoff, Retry-After header parsing, circuit breaker |
+| Thread-unsafe metrics | `LongAdder` + `CopyOnWriteArrayList` — safe under concurrent load |
+| Secrets in logs | `toString()` masks API keys and Authorization headers |
+| Timeout misconfiguration | Split timeouts: connect, read, overall deadline, stream idle |
 
 ## Architecture
 
 ```mermaid
-graph TB
-    subgraph "Your Application"
-        JAVA[Java App]
-        SPRING[Spring Boot App]
-    end
-    
-    subgraph "Entry Points"
-        ALL[synapse-all]
-        STARTER[synapse-spring-boot-starter]
-    end
-    
-    subgraph "Core Modules"
-        CORE[synapse-core]
-        INTER[synapse-interceptors]
-        CONFIG[synapse-config]
-    end
-    
-    subgraph "Implementation Modules"
-        HTTP[synapse-http]
-        METRICS[synapse-metrics]
-    end
-    
-    subgraph "LLM Providers"
-        OAI[OpenAI]
-        ANT[Anthropic]
-        COH[Cohere]
-        OTHER[Others...]
-    end
-    
-    JAVA --> ALL
-    SPRING --> STARTER
-    
-    ALL --> CORE
-    ALL --> INTER
-    ALL --> CONFIG
-    ALL --> HTTP
-    ALL --> METRICS
-    
-    STARTER --> CORE
-    STARTER --> INTER
-    STARTER --> CONFIG
-    STARTER --> HTTP
-    STARTER --> METRICS
-    
-    HTTP --> OAI
-    HTTP --> ANT
-    HTTP --> COH
-    HTTP --> OTHER
-    
-    HTTP --> CORE
-    HTTP --> CONFIG
-    HTTP --> METRICS
-    HTTP --> INTER
-```
+graph TD
+    A["Your Application<br/>Java 17+ / Spring Boot 3.x"] --> B["ISynapseHub<br/>12-method interface, zero provider coupling"]
 
-## Module Structure
+    B --> C["Retry Handler<br/>Jittered backoff + Retry-After"]
+    B --> D["Circuit Breaker<br/>CLOSED → OPEN → HALF_OPEN"]
+    B --> E["Concurrency Limiter<br/>Semaphore-based bounded permits"]
 
-```mermaid
-graph LR
-    subgraph "synapse-core"
-        ISynapseHub
-        ChatMessage
-        SynapseResponse
-        SynapseException
-        Model
-    end
-    
-    subgraph "synapse-interceptors"
-        SynapseRequestInterceptor
-        SynapseResponseInterceptor
-        SynapseRetryPolicy
-        SynapseMetricsListener
-    end
-    
-    subgraph "synapse-config"
-        SynapseConfig
-    end
-    
-    subgraph "synapse-http"
-        SynapseHub
-        SynapseHttpClient
-        SynapseStreamHandler
-        SynapseRetryHandler
-    end
-    
-    subgraph "synapse-metrics"
-        SynapseMetrics
-        SynapseMetricsCollector
-    end
-    
-    SynapseConfig --> ISynapseHub
-    SynapseHub --> SynapseConfig
-    SynapseHub --> SynapseHttpClient
-    SynapseHub --> SynapseStreamHandler
-    SynapseHub --> SynapseRetryHandler
-    SynapseHub --> SynapseMetricsCollector
-```
+    C --> F["synapse-http<br/>Shared HttpClient · Streaming · SSE Parser"]
+    D --> F
+    E --> F
 
-## Class Hierarchy
+    F --> G["LLM Provider API<br/>OpenAI · Anthropic · Cohere · Custom"]
 
-```mermaid
-classDiagram
-    class ISynapseHub {
-        <<interface>>
-        +sendPrompt(String) SynapseResponse
-        +sendPrompt(String, String) SynapseResponse
-        +sendChat(List~ChatMessage~) SynapseResponse
-        +sendChat(List~ChatMessage~, String) SynapseResponse
-        +chatCompletion(String) SynapseResponse
-        +chatCompletion(String, String) SynapseResponse
-        +streamPrompt(String, Consumer~String~)
-        +streamPrompt(String, Consumer~String~, String)
-        +streamChat(List~ChatMessage~, Consumer~String~)
-        +streamChat(List~ChatMessage~, Consumer~String~, String)
-        +streamCompletion(String, Consumer~String~)
-        +streamCompletion(String, Consumer~String~, String)
-        +getModelsList() List~Model~
-        +close()
-    }
-    
-    class SynapseHub {
-        -SynapseConfig config
-        -SynapseHttpClient httpClient
-        -SynapseStreamHandler streamHandler
-        -SynapseRetryHandler retryHandler
-        -SynapseMetricsCollector metricsCollector
-        +sendPrompt(String) SynapseResponse
-        +sendPrompt(String, String) SynapseResponse
-        +sendChat(List~ChatMessage~) SynapseResponse
-        +sendChat(List~ChatMessage~, String) SynapseResponse
-        +chatCompletion(String) SynapseResponse
-        +chatCompletion(String, String) SynapseResponse
-        +streamPrompt(String, Consumer~String~)
-        +streamPrompt(String, Consumer~String~, String)
-        +streamChat(List~ChatMessage~, Consumer~String~)
-        +streamChat(List~ChatMessage~, Consumer~String~, String)
-        +streamCompletion(String, Consumer~String~)
-        +streamCompletion(String, Consumer~String~, String)
-        +getModelsList() List~Model~
-        +getMetrics() SynapseMetrics
-    }
-    
-    class SynapseConfig {
-        -String baseUrl
-        -String endpoint
-        -String apiKey
-        -String modelName
-        -SynapseRequestInterceptor requestInterceptor
-        -SynapseResponseInterceptor responseInterceptor
-        -SynapseRetryPolicy retryPolicy
-        -SynapseMetricsListener metricsListener
-        +builder() Builder
-        +validate()
-    }
-    
-    class AbstractSynapseConfig {
-        <<abstract>>
-        #double temperature
-        #int maxTokens
-        #Duration timeout
-        #int maxRetries
-    }
-    
-    class ChatMessage {
-        -String role
-        -String content
-        +system(String) ChatMessage
-        +user(String) ChatMessage
-        +assistant(String) ChatMessage
-    }
-    
-    class SynapseResponse {
-        -String content
-        -String model
-        -int promptTokens
-        -int completionTokens
-        -String finishReason
-    }
-    
-    class SynapseException {
-        -int statusCode
-        -String responseBody
-        -ExceptionType type
-        +isRetryable() boolean
-    }
-    
-    class SynapseRequestInterceptor {
-        <<interface>>
-        +beforeRequest(SynapseRequestContext)
-        +afterRequest(SynapseRequestContext)
-        +onError(SynapseRequestContext, SynapseException)
-    }
-    
-    class SynapseResponseInterceptor {
-        <<interface>>
-        +beforeResponse(SynapseResponseContext)
-        +afterResponse(SynapseResponseContext)
-        +onError(SynapseResponseContext, SynapseException)
-    }
-    
-    class SynapseRetryPolicy {
-        <<interface>>
-        +shouldRetry(int, SynapseException) boolean
-        +getDelay(int) long
-        +getMaxRetries() int
-    }
-    
-    class SynapseMetricsListener {
-        <<interface>>
-        +onRequestStarted(String)
-        +onRequestCompleted(SynapseMetricsSummary)
-        +onRequestFailed(SynapseMetricsSummary, SynapseException)
-    }
-    
-    ISynapseHub <|.. SynapseHub
-    AbstractSynapseConfig <|-- SynapseConfig
-    SynapseRequestInterceptor <|.. LoggingInterceptor
-    SynapseResponseInterceptor <|.. ResponseLogger
-    SynapseRetryPolicy <|.. CustomRetryPolicy
-    SynapseMetricsListener <|.. MetricsListener
+    style A fill:#1e3a8a,stroke:#4c6ef5,color:#fff
+    style B fill:#3b1764,stroke:#8b5cf6,color:#fff
+    style C fill:#1a2e05,stroke:#22c55e,color:#fff
+    style D fill:#042f2e,stroke:#06b6d4,color:#fff
+    style E fill:#1a2e05,stroke:#22c55e,color:#fff
+    style F fill:#052e16,stroke:#00ff88,color:#fff
+    style G fill:#1f2937,stroke:#6b7280,color:#fff
 ```
 
 ## Request Flow
 
 ```mermaid
-sequenceDiagram
-    participant App as Application
-    participant Hub as SynapseHub
-    participant Builder as RequestBuilder
-    participant Interceptor as RequestInterceptor
-    participant Client as HttpClient
-    participant LLM as LLM API
-    participant Parser as ResponseParser
-    participant Metrics as MetricsCollector
-    
-    App->>Hub: sendPrompt(prompt)
-    Hub->>Hub: checkNotClosed()
-    Hub->>Builder: buildMessagesBody()
-    Builder-->>Hub: requestBody
-    Hub->>Interceptor: beforeRequest(ctx)
-    
-    alt Retryable Error
-        loop Retry attempts
-            Hub->>Client: send(request)
-            Client->>LLM: POST /chat/completions
-            LLM-->>Client: response
-            
-            alt Success (2xx)
-                Client-->>Hub: HttpResponse
-                Hub->>Parser: parse(response)
-                Parser-->>Hub: SynapseResponse
-                Hub->>Metrics: recordSuccess()
-            else Error (4xx/5xx)
-                Client-->>Hub: error response
-                Hub->>Metrics: recordFailure()
-                Hub->>Hub: throw SynapseException
-                Hub->>Hub: shouldRetry() check
-            end
-        end
-    end
-    
-    Hub->>Interceptor: afterRequest(ctx)
-    Hub-->>App: SynapseResponse
+flowchart TD
+    A["hub.sendChat(messages, options)"] --> B["Circuit Breaker<br/>allowRequest()"]
+    B -->|"OPEN"| B1["throw CIRCUIT_BREAKER_OPEN"]
+    B -->|"CLOSED / HALF_OPEN"| C["Concurrency Limiter<br/>acquire() — block until slot"]
+
+    C --> D["beforeRequest() interceptor<br/>logging, tracing, headers"]
+    D --> E["HttpClient.send()<br/>POST /chat/completions"]
+
+    E -->|"2xx Success"| F["Parse Response<br/>SynapseResponse"]
+    E -->|"4xx / 5xx Error"| G{"Retry?<br/>attempt < maxRetries"}
+
+    F --> H["Record Success<br/>CB + metrics"]
+    H --> I["Release slot + Return<br/>SynapseResponse"]
+
+    G -->|"Yes"| J["Sleep(jittered delay)<br/>Retry-After or exponential"]
+    J --> E
+    G -->|"No"| K["Record Failure<br/>CB + metrics"]
+    K --> L["throw SynapseException<br/>RETRY_EXHAUSTED / type"]
+
+    style A fill:#1e3a8a,stroke:#4c6ef5,color:#fff
+    style B fill:#042f2e,stroke:#06b6d4,color:#fff
+    style B1 fill:#450a0a,stroke:#ef4444,color:#fff
+    style C fill:#1a2e05,stroke:#22c55e,color:#fff
+    style D fill:#3b1764,stroke:#8b5cf6,color:#fff
+    style E fill:#1f2937,stroke:#6b7280,color:#fff
+    style F fill:#052e16,stroke:#00ff88,color:#fff
+    style G fill:#422006,stroke:#eab308,color:#fff
+    style H fill:#052e16,stroke:#00ff88,color:#fff
+    style I fill:#1e3a8a,stroke:#4c6ef5,color:#fff
+    style J fill:#422006,stroke:#eab308,color:#fff
+    style K fill:#450a0a,stroke:#ef4444,color:#fff
+    style L fill:#450a0a,stroke:#ef4444,color:#fff
+```
+
+## Module Structure
+
+```mermaid
+graph TD
+    P["synapse-parent (POM)"] --> A["synapse-core<br/>Core interfaces, models, exceptions"]
+    P --> B["synapse-interceptors<br/>Request, response, retry, metrics contracts"]
+    P --> C["synapse-config<br/>Immutable SynapseConfig with builder"]
+    P --> D["synapse-http<br/>SynapseHub, HttpClient, streaming, circuit breaker"]
+    P --> E["synapse-metrics<br/>Thread-safe metrics + Micrometer/OTel adapters"]
+    P --> F["synapse-all<br/>POM-only aggregator (single dependency)"]
+    P --> G["synapse-spring-boot-starter<br/>Auto-config + YAML properties"]
+    P --> H["synapse-bom<br/>BOM for version alignment"]
+
+    A --> B
+    A --> C
+    B --> D
+    C --> D
+    D --> E
+
+    style P fill:#1e3a8a,stroke:#4c6ef5,color:#fff
+    style A fill:#3b1764,stroke:#8b5cf6,color:#fff
+    style B fill:#3b1764,stroke:#8b5cf6,color:#fff
+    style C fill:#042f2e,stroke:#06b6d4,color:#fff
+    style D fill:#052e16,stroke:#00ff88,color:#fff
+    style E fill:#422006,stroke:#eab308,color:#fff
+    style F fill:#1f2937,stroke:#6b7280,color:#fff
+    style G fill:#4a1942,stroke:#ec4899,color:#fff
+    style H fill:#1f2937,stroke:#6b7280,color:#fff
+```
+
+| Module | Key Classes | Purpose |
+|--------|-------------|---------|
+| `synapse-core` | `ISynapseHub`, `ChatMessage`, `SynapseResponse`, `SynapseException`, `ToolCall`, `RequestOptions`, `StreamListener`, `StreamHandle`, `CancellationToken` | Public API surface |
+| `synapse-interceptors` | `SynapseRequestInterceptor`, `SynapseResponseInterceptor`, `SynapseRetryPolicy`, `SynapseMetricsListener` | Extension contracts |
+| `synapse-config` | `SynapseConfig` | Immutable config with split timeouts, circuit breaker, rate limit settings |
+| `synapse-http` | `SynapseHub`, `CircuitBreaker`, `ConcurrencyLimiter`, `SynapseStreamHandler`, `SynapseRetryHandler` | Full implementation |
+| `synapse-metrics` | `SynapseMetrics`, `SynapseMetricsCollector`, `SynapseMicrometerMetricsAdapter`, `SynapseOpenTelemetryExporter` | Metrics collection + export |
+| `synapse-spring-boot-starter` | `SynapseAutoConfiguration`, `SynapseProperties` | Spring Boot integration |
+
+## Requirements
+
+- **Java 17+**
+- **Maven 3.8+**
+
+## Installation
+
+### Maven
+
+```xml
+<repository>
+    <id>jitpack.io</id>
+    <url>https://jitpack.io</url>
+</repository>
+```
+
+**Single dependency** — bundles all modules:
+
+```xml
+<dependency>
+    <groupId>com.github.Abhiramrathod</groupId>
+    <artifactId>synapse-all</artifactId>
+    <version>TAG</version>
+</dependency>
+```
+
+**Spring Boot** — auto-configuration + YAML properties:
+
+```xml
+<dependency>
+    <groupId>com.github.Abhiramrathod</groupId>
+    <artifactId>synapse-spring-boot-starter</artifactId>
+    <version>TAG</version>
+</dependency>
+```
+
+**BOM** — align versions across modules:
+
+```xml
+<dependency>
+    <groupId>com.github.Abhiramrathod</groupId>
+    <artifactId>synapse-bom</artifactId>
+    <version>TAG</version>
+    <type>pom</type>
+    <scope>import</scope>
+</dependency>
+```
+
+## Quick Start
+
+### 1. Configure
+
+```java
+import org.abhi.synapse.config.SynapseConfig;
+
+SynapseConfig config = SynapseConfig.builder()
+        .baseUrl("https://api.openai.com")
+        .endpoint("/v1/chat/completions")
+        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .modelName("gpt-4")
+        .temperature(0.7)
+        .maxTokens(1024)
+        .build();
+```
+
+### 2. Create Hub
+
+```java
+import org.abhi.synapse.http.SynapseHub;
+
+SynapseHub hub = new SynapseHub(config);
+```
+
+### 3. Call the LLM
+
+**Synchronous:**
+
+```java
+SynapseResponse response = hub.sendPrompt("What is Java?", null);
+System.out.println(response.getContent());
+```
+
+**Multi-turn chat:**
+
+```java
+List<ChatMessage> messages = List.of(
+    ChatMessage.system("You are a helpful assistant."),
+    ChatMessage.user("What is Java?"),
+    ChatMessage.assistant("Java is a programming language."),
+    ChatMessage.user("How do I install it?")
+);
+
+SynapseResponse response = hub.sendChat(messages, null);
+System.out.println(response.getContent());
+```
+
+**Async:**
+
+```java
+CompletableFuture<SynapseResponse> future =
+    hub.sendPromptAsync("What is Java?", null);
+
+future.thenAccept(response ->
+    System.out.println(response.getContent())
+);
+```
+
+**Streaming with StreamListener:**
+
+```java
+StreamHandle handle = hub.streamPrompt("Write a haiku", new StreamListener() {
+    @Override
+    public void onChunk(String text) {
+        System.out.print(text);  // tokens arrive here
+    }
+
+    @Override
+    public void onComplete(SynapseResponse fullResponse) {
+        System.out.println("\n--- Done ---");
+    }
+
+    @Override
+    public void onError(SynapseException error) {
+        System.err.println("Stream failed: " + error.getMessage());
+    }
+});
+
+// Cancel mid-stream if needed
+// handle.cancel();
+```
+
+**Streaming with Consumer (via StreamListener adapter):**
+
+```java
+hub.streamPrompt("Write a haiku", StreamListener.of(chunk -> {
+    System.out.print(chunk);
+}));
+```
+
+**Flow.Publisher (reactive):**
+
+```java
+Flow.Publisher<String> publisher = hub.streamPromptAsFlow("What is Java?");
+
+publisher.subscribe(new Flow.Subscriber<>() {
+    private Flow.Subscription subscription;
+
+    @Override
+    public void onSubscribe(Flow.Subscription s) {
+        this.subscription = s;
+        s.request(Long.MAX_VALUE);
+    }
+
+    @Override
+    public void onNext(String item) {
+        System.out.print(item);
+    }
+
+    @Override
+    public void onError(Throwable t) { t.printStackTrace(); }
+
+    @Override
+    public void onComplete() { System.out.println("\nDone"); }
+});
+```
+
+### 4. Per-Request Options
+
+Override model, temperature, tools, timeouts, and response format per request:
+
+```java
+RequestOptions opts = RequestOptions.defaults()
+    .setModelName("gpt-3.5-turbo")
+    .setTemperature(0.3)
+    .setMaxTokens(512)
+    .setTools(List.of(new ToolDefinition("get_weather", "Get current weather")));
+
+SynapseResponse response = hub.sendPrompt("Weather in Tokyo?", opts);
+```
+
+### 5. Tool / Function Calling
+
+```java
+// Define tools
+ToolDefinition weatherTool = new ToolDefinition(
+    "get_weather",
+    "Get current weather for a location"
+);
+
+RequestOptions opts = RequestOptions.defaults()
+    .setTools(List.of(weatherTool));
+
+// Send request — model may return tool calls instead of text
+SynapseResponse response = hub.sendChat(
+    List.of(ChatMessage.user("What's the weather in Paris?")),
+    opts
+);
+
+if (response.getToolCalls() != null && !response.getToolCalls().isEmpty()) {
+    for (ToolCall call : response.getToolCalls()) {
+        System.out.println("Tool: " + call.getFunction().getName());
+        System.out.println("Args: " + call.getFunction().getArguments());
+    }
+} else {
+    System.out.println(response.getContent());
+}
+
+// Send tool result back
+ChatMessage toolResult = ChatMessage.tool(
+    call.getId(), call.getFunction().getName(), "{\"temp\": 22}");
+SynapseResponse followUp = hub.sendChat(
+    List.of(
+        ChatMessage.user("What's the weather in Paris?"),
+        ChatMessage.assistant("").toolCalls(List.of(call)),
+        toolResult
+    ),
+    null
+);
+```
+
+### 6. List Available Models
+
+```java
+List<Model> models = hub.getModelsList();
+models.forEach(m ->
+    System.out.printf("Model: %s (owned by: %s)%n", m.getId(), m.getOwnedBy())
+);
+```
+
+### 7. Close
+
+```java
+hub.close();  // releases HttpClient, thread pool
+// or use try-with-resources (SynapseHub implements AutoCloseable)
 ```
 
 ## Streaming Flow
@@ -292,398 +360,126 @@ sequenceDiagram
 sequenceDiagram
     participant App as Application
     participant Hub as SynapseHub
-    participant Client as HttpClient
-    participant Stream as StreamHandler
-    participant LLM as LLM API
-    
-    App->>Hub: streamPrompt(prompt, onChunk)
-    Hub->>Hub: checkNotClosed()
-    Hub->>Client: sendStreaming(request)
-    Client->>LLM: POST /chat/completions (stream=true)
-    
+    participant API as LLM API
+
+    App->>Hub: streamChat(messages, listener)
+    Hub->>API: POST /chat/completions (stream: true)
+
     loop SSE Stream
-        LLM-->>Client: data: {"choices":[{"delta":{"content":"token"}}]}
-        Client-->>Stream: line
-        Stream->>Stream: parse SSE data
-        Stream-->>App: onChunk.accept(token)
+        API-->>Hub: data: {"delta": {"content": "Hello"}}
+        Hub-->>App: listener.onChunk("Hello")
+        API-->>Hub: data: {"delta": {"content": " world"}}
+        Hub-->>App: listener.onChunk(" world")
     end
-    
-    LLM-->>Client: data: [DONE]
-    Stream-->>App: stream complete
+
+    API-->>Hub: data: [DONE]
+    Hub-->>App: listener.onComplete(fullResponse)
+    Note over App: handle.getFuture().join() completes
 ```
 
-## Module Dependencies
-
-```mermaid
-graph TD
-    synapse-core --> synapse-core
-    synapse-interceptors --> synapse-core
-    synapse-config --> synapse-core
-    synapse-config --> synapse-interceptors
-    synapse-http --> synapse-core
-    synapse-http --> synapse-config
-    synapse-http --> synapse-metrics
-    synapse-http --> synapse-interceptors
-    synapse-metrics --> synapse-core
-    synapse-metrics --> synapse-config
-    synapse-metrics --> synapse-interceptors
-    
-    synapse-all --> synapse-core
-    synapse-all --> synapse-interceptors
-    synapse-all --> synapse-config
-    synapse-all --> synapse-http
-    synapse-all --> synapse-metrics
-    
-    synapse-spring-boot-starter --> synapse-core
-    synapse-spring-boot-starter --> synapse-config
-    synapse-spring-boot-starter --> synapse-http
-    synapse-spring-boot-starter --> synapse-metrics
-    synapse-spring-boot-starter --> synapse-interceptors
-```
-
-## Error Handling Flow
-
-```mermaid
-flowchart TD
-    Start[Start Request] --> Execute[Execute Request]
-    Execute --> Success{Success?}
-    Success -->|Yes| Parse[Parse Response]
-    Parse --> Metrics[Record Metrics]
-    Metrics --> Return[Return Response]
-    
-    Success -->|No| Exception[SynapseException]
-    Exception --> Retryable{Retryable?}
-    
-    Retryable -->|Yes| MaxRetries{Max Retries?}
-    Retryable -->|No| Fail[Throw Exception]
-    
-    MaxRetries -->|No| Delay[Wait Delay]
-    Delay --> Execute
-    
-    MaxRetries -->|Yes| Exhausted[RETRY_EXHAUSTED]
-    Exhausted --> Fail
-    
-    Fail --> App[Handle Error]
-```
-
-## Requirements
-
-- Java 25+
-- Maven 3.8+
-
-## Getting Started
-
-### Installation
-
-#### Pure Java
-
-Single dependency for all Synapse modules:
-
-```xml
-<!-- JitPack -->
-<repository>
-    <id>jitpack.io</id>
-    <url>https://jitpack.io</url>
-</repository>
-
-<!-- Dependency -->
-<dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
-    <artifactId>synapse-all</artifactId>
-    <version>v1.0.4</version>
-</dependency>
-```
-
-#### Spring Boot
-
-Single dependency with auto-configuration:
-
-```xml
-<!-- JitPack -->
-<repository>
-    <id>jitpack.io</id>
-    <url>https://jitpack.io</url>
-</repository>
-
-<!-- Dependency -->
-<dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
-    <artifactId>synapse-spring-boot-starter</artifactId>
-    <version>v1.0.4</version>
-</dependency>
-```
-
-#### Using Maven Wrapper (mvnw)
-
-```bash
-# Build the project
-./mvnw clean install
-
-# Deploy to JitPack (on tag push)
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-### Quick Start
-
-#### 1. Create Configuration
+## Error Handling
 
 ```java
-import org.abhi.synapse.config.SynapseConfig;
+try {
+    SynapseResponse response = hub.sendPrompt("Hello", null);
+} catch (SynapseException e) {
+    switch (e.getType()) {
+        case RATE_LIMIT_ERROR:
+            // 429 — back off, retry later
+            break;
+        case SERVER_ERROR:
+            // 5xx — provider issue
+            break;
+        case NETWORK_ERROR:
+            // Connection refused, DNS failure
+            break;
+        case TIMEOUT_ERROR:
+            // Request exceeded timeout
+            break;
+        case CIRCUIT_BREAKER_OPEN:
+            // Too many failures — wait for half-open
+            break;
+        case RETRY_EXHAUSTED:
+            // All retry attempts failed
+            break;
+        case STREAMING_ERROR:
+            // SSE stream failed (partial content available)
+            break;
+        default:
+            // CONFIG_ERROR, PARSE_ERROR
+    }
 
-SynapseConfig config = SynapseConfig.builder()
-        .baseUrl("https://api.openai.com")
-        .endpoint("/v1/chat/completions")
-        .apiKey("your-api-key")
-        .modelName("gpt-4")
-        .temperature(0.7)
-        .maxTokens(1024)
-        .build();
-```
+    if (e.isRetryable()) {
+        // Automatically retried by the framework
+    }
 
-#### 2. Create Hub and Send Prompts
-
-```java
-import org.abhi.synapse.http.SynapseHub;
-import org.abhi.synapse.core.model.SynapseResponse;
-
-try (SynapseHub hub = new SynapseHub(config)) {
-    // Simple prompt
-    SynapseResponse response = hub.sendPrompt("What is the capital of France?");
-    System.out.println(response.getContent());
-    
-    // Multi-turn conversation
-    List<ChatMessage> messages = List.of(
-        ChatMessage.system("You are a helpful assistant."),
-        ChatMessage.user("Explain quantum computing in simple terms.")
-    );
-    SynapseResponse chatResponse = hub.sendChat(messages);
-    System.out.println(chatResponse.getContent());
+    // HTTP details
+    int status = e.getStatusCode();      // 0 if not HTTP error
+    String body = e.getResponseBody();   // null if not available
 }
 ```
 
-#### 3. Streaming
+| Exception Type | Description | Retryable |
+|---------------|-------------|-----------|
+| `CONFIG_ERROR` | Configuration validation failed | No |
+| `NETWORK_ERROR` | Network connectivity issues | Yes |
+| `TIMEOUT_ERROR` | Request timeout | Yes |
+| `RATE_LIMIT_ERROR` | API rate limit exceeded (HTTP 429) | Yes |
+| `SERVER_ERROR` | LLM API server error (HTTP 5xx) | Yes |
+| `PARSE_ERROR` | Response parsing failed | No |
+| `STREAMING_ERROR` | Streaming connection error | No |
+| `RETRY_EXHAUSTED` | Max retries exceeded | No |
+| `CIRCUIT_BREAKER_OPEN` | Circuit breaker is open | No |
 
-```java
-try (SynapseHub hub = new SynapseHub(config)) {
-    // Stream a prompt
-    hub.streamPrompt("Write a poem about programming", chunk -> {
-        System.out.print(chunk);
-    });
-    
-    // Stream a chat conversation
-    hub.streamChat(messages, chunk -> {
-        System.out.print(chunk);
-    });
-}
-```
-
-#### 4. List Available Models
-
-```java
-try (SynapseHub hub = new SynapseHub(config)) {
-    List<Model> models = hub.getModelsList();
-    for (Model model : models) {
-        System.out.printf("Model: %s (owned by: %s)%n", model.getId(), model.getOwnedBy());
-    }
-}
-```
-
-#### 5. Model Override
-
-```java
-try (SynapseHub hub = new SynapseHub(config)) {
-    // Use a different model than the configured default
-    SynapseResponse response = hub.sendPrompt("Hello", "gpt-3.5-turbo");
-    System.out.println(response.getContent());
-    
-    // Override model for streaming
-    hub.streamPrompt("Write a haiku", chunk -> System.out.print(chunk), "gpt-3.5-turbo");
-}
-```
-
-## Module Details
-
-### synapse-core
-
-The foundation module containing core interfaces and data models.
-
-| Class | Description |
-|-------|-------------|
-| `ISynapseHub` | Main interface for LLM operations |
-| `ChatMessage` | Represents a message in conversation |
-| `SynapseResponse` | Response from LLM API |
-| `SynapseException` | Custom exception with error types |
-| `Model` | Model metadata from `/v1/models` endpoint |
-
-### synapse-interceptors
-
-Defines interceptor contracts for customizing request/response behavior.
-
-| Interface | Description |
-|-----------|-------------|
-| `SynapseRequestInterceptor` | Intercept requests before/after sending |
-| `SynapseResponseInterceptor` | Intercept responses from LLM |
-| `SynapseRetryPolicy` | Custom retry logic |
-| `SynapseMetricsListener` | Listen to metrics events |
-
-### synapse-config
-
-Configuration management with builder pattern.
-
-| Class | Description |
-|-------|-------------|
-| `SynapseConfig` | Main configuration class with builder |
-
-### synapse-http
-
-HTTP transport layer and orchestration.
-
-| Class | Description |
-|-------|-------------|
-| `SynapseHub` | Main implementation of `ISynapseHub` |
-| `SynapseHttpClient` | HTTP client wrapper |
-| `SynapseStreamHandler` | SSE stream processing |
-| `SynapseRetryHandler` | Retry with exponential backoff |
-| `SynapseRequestBuilder` | Request construction |
-| `SynapseResponseParser` | Response parsing |
-
-### synapse-metrics
-
-Metrics collection and tracking.
-
-| Class | Description |
-|-------|-------------|
-| `SynapseMetrics` | In-memory metrics storage |
-| `SynapseMetricsCollector` | Collects and records metrics |
-
-### synapse-spring-boot-starter
-
-Spring Boot auto-configuration.
-
-| Class | Description |
-|-------|-------------|
-| `SynapseAutoConfiguration` | Auto-configures beans |
-| `SynapseProperties` | Configuration properties binding |
-
-## Advanced Usage
-
-### Custom Request Interceptor
-
-```java
-import org.abhi.synapse.interceptors.SynapseRequestInterceptor;
-import org.abhi.synapse.core.model.SynapseRequestContext;
-
-public class LoggingInterceptor implements SynapseRequestInterceptor {
-    
-    @Override
-    public void beforeRequest(SynapseRequestContext ctx) {
-        System.out.println("Sending request to: " + ctx.getUrl());
-        System.out.println("Headers: " + ctx.getHeaders());
-    }
-    
-    @Override
-    public void afterRequest(SynapseRequestContext ctx) {
-        System.out.println("Request completed for: " + ctx.getUrl());
-    }
-    
-    @Override
-    public void onError(SynapseRequestContext ctx, SynapseException error) {
-        System.err.println("Request failed: " + error.getMessage());
-    }
-}
-```
-
-### Custom Retry Policy
-
-```java
-import org.abhi.synapse.interceptors.SynapseRetryPolicy;
-import org.abhi.synapse.core.exception.SynapseException;
-
-public class CustomRetryPolicy implements SynapseRetryPolicy {
-    
-    @Override
-    public boolean shouldRetry(int attempt, SynapseException error) {
-        // Only retry on rate limit or server errors
-        return error.getType() == SynapseException.ExceptionType.RATE_LIMIT_ERROR
-                || error.getType() == SynapseException.ExceptionType.SERVER_ERROR;
-    }
-    
-    @Override
-    public long getDelay(int attempt) {
-        // Exponential backoff: 1s, 2s, 4s
-        return 1000L * (long) Math.pow(2, attempt);
-    }
-    
-    @Override
-    public int getMaxRetries() {
-        return 3;
-    }
-}
-```
-
-### Metrics Listener
-
-```java
-import org.abhi.synapse.interceptors.SynapseMetricsListener;
-import org.abhi.synapse.core.model.SynapseMetricsSummary;
-
-public class MetricsListener implements SynapseMetricsListener {
-    
-    @Override
-    public void onRequestCompleted(SynapseMetricsSummary summary) {
-        System.out.printf("Request to %s completed in %dms - %d prompt tokens, %d completion tokens%n",
-                summary.getModel(),
-                summary.getLatencyMs(),
-                summary.getPromptTokens(),
-                summary.getCompletionTokens());
-    }
-    
-    @Override
-    public void onRequestFailed(SynapseMetricsSummary summary, SynapseException error) {
-        System.err.printf("Request to %s failed: %s%n",
-                summary.getModel(),
-                error != null ? error.getMessage() : "Unknown error");
-    }
-}
-```
-
-### Full Configuration Example
+## Configuration Reference
 
 ```java
 SynapseConfig config = SynapseConfig.builder()
+        // Required
         .baseUrl("https://api.openai.com")
         .endpoint("/v1/chat/completions")
         .apiKey(System.getenv("OPENAI_API_KEY"))
         .modelName("gpt-4")
-        .temperature(0.7)
+
+        // Tuning
+        .temperature(0.7)              // 0.0 - 2.0
         .maxTokens(2048)
-        .timeout(Duration.ofSeconds(30))
+
+        // Timeouts (split)
+        .connectTimeout(Duration.ofSeconds(5))
+        .readTimeout(Duration.ofSeconds(30))
+        .requestTimeout(Duration.ofSeconds(60))   // overall deadline
+        .streamIdleTimeout(Duration.ofSeconds(30))
+
+        // Retry
         .maxRetries(3)
         .retryDelay(Duration.ofMillis(500))
-        .enableLogging(true)
+        .maxRetryElapsedTime(Duration.ofSeconds(120))
+
+        // Concurrency
+        .maxConcurrentRequests(64)
+        .maxRequestsPerMinute(0)           // 0 = unlimited
+
+        // Circuit Breaker
+        .circuitBreakerFailureThreshold(5)
+        .circuitBreakerOpenDuration(Duration.ofSeconds(30))
+
+        // Interceptors
         .requestInterceptor(new LoggingInterceptor())
-        .responseInterceptor(new ResponseLogger())
+        .responseInterceptor(new MetricsInterceptor())
         .retryPolicy(new CustomRetryPolicy())
         .metricsListener(new MetricsListener())
+
+        // Misc
+        .enableLogging(true)
         .build();
 ```
 
 ## Spring Boot Integration
 
-### Add Dependency
-
-```xml
-<dependency>
-    <groupId>org.abhi</groupId>
-    <artifactId>synapse-spring-boot-starter</artifactId>
-</dependency>
-```
-
-### Configure Application Properties
+### application.yml
 
 ```yaml
-# application.yml
 synapse:
   base-url: https://api.openai.com
   endpoint: /v1/chat/completions
@@ -691,300 +487,106 @@ synapse:
   model-name: gpt-4
   temperature: 0.7
   max-tokens: 1024
-  timeout: 30s
+  connect-timeout: 5s
+  read-timeout: 30s
+  request-timeout: 60s
+  stream-idle-timeout: 30s
   max-retries: 3
   retry-delay: 500ms
+  max-retry-elapsed-time: 120s
+  max-concurrent-requests: 64
+  max-requests-per-minute: 0
+  circuit-breaker-failure-threshold: 5
+  circuit-breaker-open-duration: 30s
   enable-logging: true
 ```
 
-### Inject and Use
+### Inject ISynapseHub
 
 ```java
 @Service
 public class LlmService {
-    
+
     private final ISynapseHub synapseHub;
-    
+
     public LlmService(ISynapseHub synapseHub) {
         this.synapseHub = synapseHub;
     }
-    
+
     public String askQuestion(String question) {
-        SynapseResponse response = synapseHub.sendPrompt(question);
+        SynapseResponse response = synapseHub.sendPrompt(question, null);
         return response.getContent();
     }
 }
 ```
 
-### Using Interceptors in Spring Boot
+## Interceptors
 
-#### 1. Create Interceptor as Component
+### Request Interceptor
 
 ```java
-package com.example.synapse.interceptors;
+public class TracingInterceptor implements SynapseRequestInterceptor {
 
-import org.abhi.synapse.interceptors.SynapseRequestInterceptor;
-import org.abhi.synapse.interceptors.SynapseResponseInterceptor;
-import org.abhi.synapse.interceptors.SynapseRetryPolicy;
-import org.abhi.synapse.interceptors.SynapseMetricsListener;
-import org.abhi.synapse.core.model.SynapseRequestContext;
-import org.abhi.synapse.core.model.SynapseResponseContext;
-import org.abhi.synapse.core.model.SynapseMetricsSummary;
-import org.abhi.synapse.core.exception.SynapseException;
-import org.springframework.stereotype.Component;
-
-@Component
-public class LoggingRequestInterceptor implements SynapseRequestInterceptor {
-    
     @Override
     public void beforeRequest(SynapseRequestContext ctx) {
-        System.out.println("[Synapse] Request to: " + ctx.getUrl());
+        ctx.getHeaders().put("X-Request-Id", UUID.randomUUID().toString());
     }
-    
-    @Override
-    public void afterRequest(SynapseRequestContext ctx) {
-        System.out.println("[Synapse] Request completed: " + ctx.getUrl());
-    }
-    
-    @Override
-    public void onError(SynapseRequestContext ctx, SynapseException error) {
-        System.err.println("[Synapse] Request failed: " + error.getMessage());
-    }
-}
 
-@Component
-public class MetricsResponseInterceptor implements SynapseResponseInterceptor {
-    
     @Override
-    public void afterResponse(SynapseResponseContext ctx) {
-        System.out.printf("[Synapse] Response in %dms (status: %d)%n",
-                ctx.getLatencyMs(), ctx.getStatusCode());
-    }
-}
+    public void afterRequest(SynapseRequestContext ctx) { }
 
-@Component
-public class CustomRetryPolicy implements SynapseRetryPolicy {
-    
     @Override
-    public boolean shouldRetry(int attempt, SynapseException error) {
-        return error.getType() == SynapseException.ExceptionType.RATE_LIMIT_ERROR
-                || error.getType() == SynapseException.ExceptionType.SERVER_ERROR;
-    }
-    
-    @Override
-    public long getDelay(int attempt) {
-        return 1000L * (long) Math.pow(2, attempt);
-    }
-    
-    @Override
-    public int getMaxRetries() {
-        return 3;
-    }
+    public void onError(SynapseRequestContext ctx, SynapseException error) { }
 }
+```
 
-@Component
-public class LoggingMetricsListener implements SynapseMetricsListener {
-    
+### Metrics Listener
+
+```java
+public class MicrometerListener implements SynapseMetricsListener {
+
     @Override
     public void onRequestCompleted(SynapseMetricsSummary summary) {
-        System.out.printf("[Synapse] %s - %dms, %d tokens%n",
-                summary.getModel(), summary.getLatencyMs(), summary.getTotalTokens());
+        Timer.builder("synapse.request")
+            .tag("model", summary.getModel())
+            .register(meterRegistry)
+            .record(summary.getLatencyMs(), TimeUnit.MILLISECONDS);
     }
-    
+
     @Override
     public void onRequestFailed(SynapseMetricsSummary summary, SynapseException error) {
-        System.err.printf("[Synapse] %s failed: %s%n",
-                summary.getModel(), error != null ? error.getMessage() : "Unknown");
+        // record failure metrics
     }
 }
 ```
 
-#### 2. Register Interceptors via Configuration
+## Metrics Export
+
+Zero-dep in-memory collector by default. Optional adapters via reflection (no compile-time dependency):
 
 ```java
-package com.example.synapse.config;
+// Micrometer (add micrometer-core as optional dependency)
+SynapseMicrometerMetricsAdapter adapter =
+    new SynapseMicrometerMetricsAdapter(meterRegistry);
+adapter.bind(hub.getMetrics());
 
-import org.abhi.synapse.config.SynapseConfig;
-import org.abhi.synapse.interceptors.SynapseRequestInterceptor;
-import org.abhi.synapse.interceptors.SynapseResponseInterceptor;
-import org.abhi.synapse.interceptors.SynapseRetryPolicy;
-import org.abhi.synapse.interceptors.SynapseMetricsListener;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class SynapseInterceptorConfig {
-    
-    @Bean
-    public SynapseConfig synapseConfig(
-            SynapseProperties properties,
-            @Qualifier("loggingRequestInterceptor") SynapseRequestInterceptor requestInterceptor,
-            @Qualifier("metricsResponseInterceptor") SynapseResponseInterceptor responseInterceptor,
-            @Qualifier("customRetryPolicy") SynapseRetryPolicy retryPolicy,
-            @Qualifier("loggingMetricsListener") SynapseMetricsListener metricsListener) {
-        
-        return SynapseConfig.builder()
-                .baseUrl(properties.getBaseUrl())
-                .endpoint(properties.getEndpoint())
-                .apiKey(properties.getApiKey())
-                .modelName(properties.getModelName())
-                .temperature(properties.getTemperature())
-                .maxTokens(properties.getMaxTokens())
-                .requestInterceptor(requestInterceptor)
-                .responseInterceptor(responseInterceptor)
-                .retryPolicy(retryPolicy)
-                .metricsListener(metricsListener)
-                .build();
-    }
-}
+// OpenTelemetry (add opentelemetry-api as optional dependency)
+SynapseOpenTelemetryExporter exporter =
+    new SynapseOpenTelemetryExporter(meterizer);
+exporter.bind(hub.getMetrics());
 ```
-
-#### 3. Alternative: Programmatic Registration
-
-```java
-@Service
-public class LlmService {
-    
-    private final ISynapseHub synapseHub;
-    
-    public LlmService(
-            SynapseProperties properties,
-            SynapseRequestInterceptor requestInterceptor,
-            SynapseResponseInterceptor responseInterceptor,
-            SynapseRetryPolicy retryPolicy,
-            SynapseMetricsListener metricsListener) {
-        
-        SynapseConfig config = SynapseConfig.builder()
-                .baseUrl(properties.getBaseUrl())
-                .endpoint(properties.getEndpoint())
-                .apiKey(properties.getApiKey())
-                .modelName(properties.getModelName())
-                .requestInterceptor(requestInterceptor)
-                .responseInterceptor(responseInterceptor)
-                .retryPolicy(retryPolicy)
-                .metricsListener(metricsListener)
-                .build();
-        
-        this.synapseHub = new SynapseHub(config);
-    }
-    
-    public String askQuestion(String question) {
-        SynapseResponse response = synapseHub.sendPrompt(question);
-        return response.getContent();
-    }
-}
-```
-
-#### 4. Conditional Interceptors
-
-```java
-@Configuration
-public class ConditionalInterceptorConfig {
-    
-    @Bean
-    @ConditionalOnProperty(name = "synapse.interceptors.logging.enabled", havingValue = "true")
-    public SynapseRequestInterceptor loggingRequestInterceptor() {
-        return new LoggingRequestInterceptor();
-    }
-    
-    @Bean
-    @ConditionalOnProperty(name = "synapse.interceptors.metrics.enabled", havingValue = "true")
-    public SynapseMetricsListener metricsListener() {
-        return new LoggingMetricsListener();
-    }
-}
-```
-
-## Error Handling
-
-Synapse provides a structured exception hierarchy with `SynapseException`:
-
-```java
-try {
-    SynapseResponse response = hub.sendPrompt("Hello");
-} catch (SynapseException e) {
-    switch (e.getType()) {
-        case RATE_LIMIT_ERROR:
-            // Handle rate limiting
-            break;
-        case SERVER_ERROR:
-            // Handle server errors
-            break;
-        case NETWORK_ERROR:
-            // Handle network issues
-            break;
-        case TIMEOUT_ERROR:
-            // Handle timeout
-            break;
-        default:
-            // Handle other errors
-    }
-    
-    if (e.isRetryable()) {
-        // Automatically retried based on retry policy
-    }
-}
-```
-
-## Exception Types
-
-| Type | Description | Retryable |
-|------|-------------|-----------|
-| `CONFIG_ERROR` | Configuration validation failed | No |
-| `NETWORK_ERROR` | Network connectivity issues | Yes |
-| `TIMEOUT_ERROR` | Request timeout | Yes |
-| `RATE_LIMIT_ERROR` | API rate limit exceeded | Yes |
-| `SERVER_ERROR` | LLM API server error | Yes |
-| `PARSE_ERROR` | Response parsing failed | No |
-| `STREAMING_ERROR` | Streaming connection error | No |
-| `RETRY_EXHAUSTED` | Max retries exceeded | No |
 
 ## CI/CD
 
-This project uses GitHub Actions for continuous integration with automatic versioning.
+| Trigger | Action |
+|---------|--------|
+| Push to `master` | Build + test only |
+| Semver tag (`v*`) | Full test → package → GitHub Release with auto-generated notes |
 
-### Workflow
-
-| Trigger | Description |
-|---------|-------------|
-| Push to main | Builds, tests, auto-creates incrementing tag |
-| Manual dispatch | Same as push to main |
-
-### How It Works
-
-1. **Push to main** triggers the workflow
-2. **Build job** compiles, tests, and packages
-3. **Auto-tag job** increments the version tag (e.g., `v1.0.0` → `v1.0.1`)
-4. **JitPack** automatically builds the new tag
-
-### Auto-Versioning
-
-Tags auto-increment on each push:
-- `v0.0.0` → `v0.0.1` → `v0.0.2` → ...
-- To increment minor/major, manually create tag:
-  ```bash
-  git tag -a v1.0.0 -m "Release 1.0.0"
-  git push origin v1.0.0
-  ```
-
-### JitPack Integration
-
-This project is available via [JitPack](https://jitpack.io/#Abhiramrathod/synapse).
-
-After tag is created, JitPack builds automatically. Use in your project:
-
-```xml
-<repository>
-    <id>jitpack.io</id>
-    <url>https://jitpack.io</url>
-</repository>
-
-<dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
-    <artifactId>synapse-all</artifactId>
-    <version>v1.0.4</version>
-</dependency>
+```bash
+# Create a release
+git tag -a v1.0.0 -m "Release 1.0.0"
+git push origin v1.0.0
 ```
 
 ## Building from Source
@@ -992,12 +594,9 @@ After tag is created, JitPack builds automatically. Use in your project:
 ```bash
 git clone https://github.com/Abhiramrathod/synapse.git
 cd synapse
-mvn clean install
+./mvnw clean install
 ```
 
-## Building from Source
+## License
 
-```bash
-git clone https://github.com/Abhiramrathod/synapse.git
-mvn clean install
-```
+Apache License 2.0

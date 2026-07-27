@@ -207,7 +207,21 @@ export default function GettingStartedPage() {
                   </div>
                 </div>
                 <CodeBlock
-                  code={quickStartCode}
+                  code={`try (SynapseHub hub = new SynapseHub(config)) {
+    // One-shot prompt
+    SynapseResponse response = hub.sendPrompt(
+        "What is the capital of France?", null
+    );
+    System.out.println(response.getContent());
+
+    // Multi-turn conversation
+    List<ChatMessage> messages = List.of(
+        ChatMessage.system("You are a helpful assistant."),
+        ChatMessage.user("Explain quantum computing.")
+    );
+    SynapseResponse chat = hub.sendChat(messages, null);
+    System.out.println(chat.getContent());
+}`}
                   language="java"
                   title="QuickStart.java"
                 />
@@ -233,7 +247,36 @@ export default function GettingStartedPage() {
                   </div>
                 </div>
                 <CodeBlock
-                  code={streamingCode}
+                  code={`try (SynapseHub hub = new SynapseHub(config)) {
+    // Stream with StreamListener — chunk, complete, error callbacks
+    StreamHandle handle = hub.streamPrompt(
+        "Write a poem about programming",
+        new StreamListener() {
+            @Override
+            public void onChunk(String text) {
+                System.out.print(text);
+            }
+
+            @Override
+            public void onComplete(SynapseResponse full) {
+                System.out.println("\\n--- Done ---");
+            }
+
+            @Override
+            public void onError(SynapseException e) {
+                System.err.println("Failed: " + e.getMessage());
+            }
+        }
+    );
+
+    // Cancel mid-stream if needed
+    // handle.cancel();
+
+    // Or use the Consumer adapter
+    hub.streamPrompt("Write a haiku", StreamListener.of(chunk -> {
+        System.out.print(chunk);
+    }));
+}`}
                   language="java"
                   title="Streaming.java"
                 />
@@ -275,7 +318,20 @@ export default function GettingStartedPage() {
                   <span className="text-sm font-medium text-white">LlmService.java</span>
                   <span className="text-xs text-gray-500 ml-auto">Dependency injection</span>
                 </div>
-                <CodeBlock code={springBootServiceCode} language="java" title="LlmService.java" />
+                <CodeBlock code={`@Service
+public class LlmService {
+
+    private final ISynapseHub synapseHub;
+
+    public LlmService(ISynapseHub synapseHub) {
+        this.synapseHub = synapseHub;
+    }
+
+    public String askQuestion(String question) {
+        SynapseResponse response = synapseHub.sendPrompt(question, null);
+        return response.getContent();
+    }
+}`} language="java" title="LlmService.java" />
               </div>
             </FadeIn>
           </div>
