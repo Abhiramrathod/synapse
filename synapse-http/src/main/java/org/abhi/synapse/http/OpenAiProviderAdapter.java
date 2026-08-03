@@ -9,9 +9,14 @@ import java.util.*;
 
 public class OpenAiProviderAdapter implements ProviderAdapter {
     private final ObjectMapper objectMapper;
+    public OpenAiProviderAdapter() { this(new ObjectMapper()); }
     public OpenAiProviderAdapter(ObjectMapper objectMapper) { this.objectMapper = objectMapper; }
     @Override public String providerName() { return "openai"; }
     @Override public String buildUrl(String baseUrl, String endpoint) { return baseUrl.replaceAll("/+$", "") + endpoint; }
+    @Override public String buildModelsUrl(String baseUrl) {
+        String cleanUrl = baseUrl.replaceAll("/+$", "");
+        return cleanUrl.endsWith("/v1") ? cleanUrl + "/models" : cleanUrl + "/v1/models";
+    }
     @Override public Map<String, String> buildAuthHeaders(String apiKey) {
         Map<String, String> h = new HashMap<>(); h.put("Authorization", "Bearer " + apiKey); return h;
     }

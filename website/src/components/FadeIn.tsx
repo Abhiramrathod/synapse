@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion'
-import { ReactNode } from 'react'
+import { motion } from 'motion/react'
+import type { ReactNode } from 'react'
 
 interface FadeInProps {
   children: ReactNode

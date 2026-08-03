@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route } from 'react-router'
 import { useMemo } from 'react'
 import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
@@ -21,7 +21,7 @@ export default function App() {
   const basename = useBasename()
 
   return (
-    <Router basename={basename}>
+    <Router basename={basename} useTransitions>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<HomePage />} />

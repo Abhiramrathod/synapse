@@ -10,8 +10,8 @@ A production-ready, provider-agnostic Java client for any LLM API. One unified i
 
 | Problem | Synapse Solution |
 |---------|-----------------|
-| Vendor lock-in | Provider SPI — swap providers with zero code changes |
-| No streaming control | `StreamListener` with chunk/complete/error callbacks + cancellation |
+| Vendor lock-in | `ProviderAdapter` SPI via `ServiceLoader` — add a provider with one class + one registration file, zero core changes |
+| No streaming control | `StreamListener` with chunk/complete/error callbacks + cancellation + `Flow.Publisher` |
 | Brittle retry logic | Jittered exponential backoff, Retry-After header parsing, circuit breaker |
 | Thread-unsafe metrics | `LongAdder` + `CopyOnWriteArrayList` — safe under concurrent load |
 | Secrets in logs | `toString()` masks API keys and Authorization headers |
@@ -114,7 +114,7 @@ graph TD
 | `synapse-core` | `ISynapseHub`, `ChatMessage`, `SynapseResponse`, `SynapseException`, `ToolCall`, `RequestOptions`, `StreamListener`, `StreamHandle`, `CancellationToken` | Public API surface |
 | `synapse-interceptors` | `SynapseRequestInterceptor`, `SynapseResponseInterceptor`, `SynapseRetryPolicy`, `SynapseMetricsListener` | Extension contracts |
 | `synapse-config` | `SynapseConfig` | Immutable config with split timeouts, circuit breaker, rate limit settings |
-| `synapse-http` | `SynapseHub`, `CircuitBreaker`, `ConcurrencyLimiter`, `SynapseStreamHandler`, `SynapseRetryHandler` | Full implementation |
+| `synapse-http` | `SynapseHub`, `ProviderAdapter`/`OpenAiProviderAdapter`, `CircuitBreaker`, `ConcurrencyLimiter`, `SynapseStreamHandler`, `SynapseRetryHandler` | Full implementation |
 | `synapse-metrics` | `SynapseMetrics`, `SynapseMetricsCollector`, `SynapseMicrometerMetricsAdapter`, `SynapseOpenTelemetryExporter` | Metrics collection + export |
 | `synapse-spring-boot-starter` | `SynapseAutoConfiguration`, `SynapseProperties` | Spring Boot integration |
 
@@ -440,6 +440,7 @@ SynapseConfig config = SynapseConfig.builder()
         .endpoint("/v1/chat/completions")
         .apiKey(System.getenv("OPENAI_API_KEY"))
         .modelName("gpt-4")
+        .provider("openai")          // matches a registered ProviderAdapter
 
         // Tuning
         .temperature(0.7)              // 0.0 - 2.0
@@ -475,6 +476,222 @@ SynapseConfig config = SynapseConfig.builder()
         .build();
 ```
 
+## Provider SPI — Bring Your Own Provider
+
+Synapse uses the Java `ServiceLoader` mechanism as its **Service Provider Interface (SPI)**.
+Every provider is a plain class that implements `org.abhi.synapse.core.ProviderAdapter` and
+registers itself via a single file in `META-INF/services`. Nothing in the core or HTTP
+modules is provider-specific, so a new provider requires **zero changes to Synapse itself**.
+
+> `OpenAiProviderAdapter` (in `synapse-http`) is the reference implementation and ships
+> registered by default. It is the template to copy for any new provider.
+
+### The contract
+
+```java
+public interface ProviderAdapter {
+    String providerName();                                              // unique id, matched against config.provider
+    String buildUrl(String baseUrl, String endpoint);                   // request URL construction
+    Map<String, String> buildAuthHeaders(String apiKey);                // auth headers (Bearer, x-api-key, ...)
+    default Map<String, String> buildHeaders(String apiKey);            // Content-Type + auth (already provided)
+    Map<String, Object> buildChatBody(List<ChatMessage> messages,       // request body for chat completions
+            double temperature, int maxTokens, String modelName,
+            boolean streaming, List<ToolDefinition> tools, String responseFormat);
+    SynapseResponse parseResponse(String responseBody);                 // non-streaming response -> SynapseResponse
+    List<Model> parseModels(String responseBody);                       // /models response -> List<Model>
+    String extractContentFromStreamChunk(String jsonData);              // one SSE chunk -> text delta
+    boolean isStreamDone(String line);                                  // is the stream finished?
+    default String extractStreamData(String line);                      // SSE framing (default handles "data: ")
+    default String buildModelsUrl(String baseUrl);                      // models list URL (default OpenAI-compatible)
+}
+```
+
+### Step 1 — Implement the adapter
+
+A minimal Anthropic adapter (implements the contract using Anthropic's Messages API):
+
+```java
+package com.myapp.provider;
+
+import org.abhi.synapse.core.ProviderAdapter;
+import org.abhi.synapse.core.exception.SynapseException;
+import org.abhi.synapse.core.model.*;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.*;
+
+public class AnthropicProviderAdapter implements ProviderAdapter {
+
+    private final ObjectMapper objectMapper;
+
+    public AnthropicProviderAdapter() { this(new ObjectMapper()); }
+    public AnthropicProviderAdapter(ObjectMapper objectMapper) { this.objectMapper = objectMapper; }
+
+    @Override
+    public String providerName() { return "anthropic"; }
+
+    @Override
+    public String buildUrl(String baseUrl, String endpoint) {
+        return baseUrl.replaceAll("/+$", "") + endpoint;
+    }
+
+    @Override
+    public Map<String, String> buildAuthHeaders(String apiKey) {
+        Map<String, String> h = new HashMap<>();
+        h.put("x-api-key", apiKey);                       // not Bearer!
+        h.put("anthropic-version", "2023-06-01");
+        return h;
+    }
+
+    @Override
+    public Map<String, Object> buildChatBody(List<ChatMessage> messages, double temperature,
+            int maxTokens, String modelName, boolean streaming,
+            List<ToolDefinition> tools, String responseFormat) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", modelName);
+        body.put("max_tokens", maxTokens);
+        body.put("temperature", temperature);
+        if (streaming) body.put("stream", true);
+
+        StringBuilder system = new StringBuilder();
+        List<Map<String, Object>> msgs = new ArrayList<>();
+        for (ChatMessage m : messages) {
+            if ("system".equals(m.getRole())) {
+                system.append(m.getContent()).append("\n");   // Anthropic uses a top-level system field
+            } else {
+                Map<String, Object> msg = new HashMap<>();
+                msg.put("role", m.getRole());
+                msg.put("content", m.getContent());
+                msgs.add(msg);
+            }
+        }
+        if (system.length() > 0) body.put("system", system.toString().trim());
+        body.put("messages", msgs);
+        return body;
+    }
+
+    @Override
+    public SynapseResponse parseResponse(String responseBody) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            SynapseResponse response = new SynapseResponse();
+            response.setModel(root.path("model").asText(null));
+            response.setContent(root.path("content").path(0).path("text").asText(""));
+            response.setFinishReason(root.path("stop_reason").asText(null));
+            JsonNode usage = root.path("usage");
+            response.setPromptTokens(usage.path("input_tokens").asInt(0));
+            response.setCompletionTokens(usage.path("output_tokens").asInt(0));
+            return response;
+        } catch (Exception e) {
+            throw new SynapseException("Failed to parse Anthropic response", e,
+                    SynapseException.ExceptionType.PARSE_ERROR);
+        }
+    }
+
+    @Override
+    public List<Model> parseModels(String responseBody) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            List<Model> models = new ArrayList<>();
+            for (JsonNode n : root.path("data")) {
+                models.add(Model.builder()
+                        .id(n.path("id").asText(null))
+                        .ownedBy(n.path("display_name").asText(null))
+                        .build());
+            }
+            return models;
+        } catch (Exception e) {
+            throw new SynapseException("Failed to parse Anthropic models response", e,
+                    SynapseException.ExceptionType.PARSE_ERROR);
+        }
+    }
+
+    @Override
+    public String extractStreamData(String line) {
+        // Anthropic frames are "event: ..." / "data: {json}"; only yield JSON payloads
+        if (line == null) return null;
+        String t = line.trim();
+        return t.startsWith("data:") && t.substring(5).trim().startsWith("{")
+                ? t.substring(5).trim() : null;
+    }
+
+    @Override
+    public String extractContentFromStreamChunk(String jsonData) {
+        try {
+            return objectMapper.readTree(jsonData)
+                    .path("delta").path("text").asText("");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    @Override
+    public boolean isStreamDone(String line) {
+        return line == null || line.contains("message_stop");
+    }
+}
+```
+
+### Step 2 — Register the provider
+
+Create a resource file so `ServiceLoader` can discover it:
+
+```text
+src/main/resources/META-INF/services/org.abhi.synapse.core.ProviderAdapter
+```
+
+```text
+com.myapp.provider.AnthropicProviderAdapter
+```
+
+Putting the adapter in a **separate module/jar** lets you add providers without touching
+your application code or recompiling Synapse — just drop the jar on the classpath.
+
+### Step 3 — Select the provider
+
+```java
+SynapseConfig config = SynapseConfig.builder()
+        .baseUrl("https://api.anthropic.com")
+        .endpoint("/v1/messages")
+        .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+        .modelName("claude-3-5-sonnet-20240620")
+        .provider("anthropic")              // matches providerName()
+        .build();
+
+try (SynapseHub hub = new SynapseHub(config)) {
+    SynapseResponse response = hub.sendPrompt("Explain the API contract.", null);
+    System.out.println(response.getContent());
+}
+```
+
+Spring Boot:
+
+```yaml
+synapse:
+  base-url: https://api.anthropic.com
+  endpoint: /v1/messages
+  api-key: ${ANTHROPIC_API_KEY}
+  model-name: claude-3-5-sonnet-20240620
+  provider: anthropic
+```
+
+### Resolution rules
+
+- At hub construction, Synapse scans `ServiceLoader.load(ProviderAdapter.class)` and
+  selects the adapter whose `providerName()` matches `config.getProvider()`
+  (case-insensitive). Default provider is `openai`.
+- If no adapter matches, construction fails with an
+  `IllegalArgumentException` listing every registered provider, e.g.:
+
+  ```
+  No ProviderAdapter registered for provider 'gemini'. Registered providers: openai
+  ```
+
+- Because request bodies, auth headers, URL building, response parsing, models listing,
+  and SSE framing are all delegated to the adapter, switching providers is a config change
+  — the rest of your code (ISynapseHub, streaming, retries, metrics, interceptors)
+  stays identical.
+
 ## Spring Boot Integration
 
 ### application.yml
@@ -485,6 +702,7 @@ synapse:
   endpoint: /v1/chat/completions
   api-key: ${OPENAI_API_KEY}
   model-name: gpt-4
+  provider: openai
   temperature: 0.7
   max-tokens: 1024
   connect-timeout: 5s

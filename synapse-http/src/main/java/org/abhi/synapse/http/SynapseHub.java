@@ -2,6 +2,7 @@ package org.abhi.synapse.http;
 
 import org.abhi.synapse.config.SynapseConfig;
 import org.abhi.synapse.core.ISynapseHub;
+import org.abhi.synapse.core.ProviderAdapter;
 import org.abhi.synapse.core.RequestOptions;
 import org.abhi.synapse.core.StreamHandle;
 import org.abhi.synapse.core.StreamListener;
@@ -24,9 +25,11 @@ import org.slf4j.LoggerFactory;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,6 +42,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(SynapseHub.class);
 
     private final SynapseConfig config;
+    private final ProviderAdapter adapter;
     private final SynapseRequestBuilder requestBuilder;
     private final SynapseResponseParser responseParser;
     private final SynapseHttpClient httpClient;
@@ -60,11 +64,12 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         this.config = config;
         this.objectMapper = objectMapper;
         this.metrics = new SynapseMetrics();
-        this.requestBuilder = new SynapseRequestBuilder(config, objectMapper);
-        this.responseParser = new SynapseResponseParser(objectMapper);
+        this.adapter = resolveAdapter(config);
+        this.requestBuilder = new SynapseRequestBuilder(config, objectMapper, adapter);
+        this.responseParser = new SynapseResponseParser(adapter);
         this.httpClient = new SynapseHttpClient(
                 HttpClient.newBuilder().connectTimeout(config.getTimeout()).build());
-        this.streamHandler = new SynapseStreamHandler(httpClient, objectMapper);
+        this.streamHandler = new SynapseStreamHandler(httpClient, adapter);
         this.retryHandler = new SynapseRetryHandler(config);
         this.metricsCollector = new SynapseMetricsCollector(metrics, config);
         this.circuitBreaker = new CircuitBreaker(
@@ -86,6 +91,22 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         } catch (SynapseException e) {
             throw new IllegalArgumentException("Invalid SynapseConfig: " + e.getMessage());
         }
+    }
+
+    private static ProviderAdapter resolveAdapter(SynapseConfig config) {
+        String provider = config.getProvider();
+        List<ProviderAdapter> adapters = new ArrayList<>();
+        ServiceLoader.load(ProviderAdapter.class).forEach(adapters::add);
+        for (ProviderAdapter candidate : adapters) {
+            if (candidate.providerName().equalsIgnoreCase(provider)) {
+                return candidate;
+            }
+        }
+        String found = adapters.stream()
+                .map(ProviderAdapter::providerName)
+                .collect(java.util.stream.Collectors.joining(", "));
+        throw new IllegalArgumentException("No ProviderAdapter registered for provider '" + provider
+                + "'. Registered providers: " + (found.isEmpty() ? "(none)" : found));
     }
 
     @Override
@@ -218,8 +239,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     @Override
     public List<Model> getModelsList() throws SynapseException {
         checkNotClosed();
-        String cleanUrl = config.getBaseUrl().replaceAll("/+$", "");
-        String baseUrl = cleanUrl.endsWith("/v1") ? cleanUrl + "/models" : cleanUrl + "/v1/models";
+        String baseUrl = adapter.buildModelsUrl(config.getBaseUrl());
 
         HttpRequest request = requestBuilder.buildGetRequest(baseUrl);
         TimedResult<HttpResponse<String>> timed = executeWithTiming("Fetching models list from: " + baseUrl,

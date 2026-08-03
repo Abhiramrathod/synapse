@@ -1,8 +1,9 @@
-import { Link, useLocation, Outlet } from 'react-router-dom'
+import { Link, useLocation, Outlet } from 'react-router'
 import { useState, useEffect } from 'react'
-import { Menu, X, Github, ExternalLink } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { Menu, X, ExternalLink } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
 import NeuralNetworkBg from './NeuralNetworkBg'
+import GithubIcon from './GithubIcon'
 
 const navItems = [
   { path: '/', label: 'Home' },
@@ -61,7 +62,7 @@ export default function Layout() {
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all"
               >
-                <Github className="w-4 h-4" />
+                <GithubIcon className="w-4 h-4" />
                 GitHub
               </a>
               <a
@@ -114,7 +115,7 @@ export default function Layout() {
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white"
                 >
-                  <Github className="w-4 h-4" /> GitHub
+                  <GithubIcon className="w-4 h-4" /> GitHub
                 </a>
               </div>
             </motion.div>

@@ -1,15 +1,17 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { ArrowRight, Github } from 'lucide-react'
+import { Link } from 'react-router'
+import { motion } from 'motion/react'
+import { ArrowRight, Check, X, Scale, ShieldCheck } from 'lucide-react'
 import FadeIn from '../components/FadeIn'
+import PageMeta from '../components/PageMeta'
+import GithubIcon from '../components/GithubIcon'
 import CodeBlock from '../components/CodeBlock'
 import Badge from '../components/Badge'
 import WasmDemo from '../components/WasmDemo'
 import ArchitectureDiagram from '../components/ArchitectureDiagram'
 import RequestFlowDiagram from '../components/RequestFlowDiagram'
 import StreamingFlowDiagram from '../components/StreamingFlowDiagram'
-import { features, modules } from '../data/content'
+import { features, modules, proofStats, comparisonRows } from '../data/content'
 import { quickStartCode, streamingCode } from '../data/codeExamples'
 
 export default function HomePage() {
@@ -18,6 +20,10 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen">
+      <PageMeta
+        title="Synapse - Universal LLM Client for Java"
+        description="A production-ready, multi-module Java library for seamless integration with any LLM API provider. Streaming-first, provider-agnostic, built with performance and developer experience in mind."
+      />
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-32 pb-20">
         {/* Background gradient mesh - neural themed */}
@@ -64,7 +70,7 @@ export default function HomePage() {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gray-800/60 hover:bg-gray-800 text-white font-medium border border-gray-700/50 transition-all"
                   >
-                    <Github className="w-4 h-4" />
+                    <GithubIcon className="w-4 h-4" />
                     View on GitHub
                   </a>
                 </div>
@@ -123,6 +129,92 @@ export default function HomePage() {
               </FadeIn>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Why Synapse is Better */}
+      <section className="py-24 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-gray-950 via-gray-900/30 to-gray-950 pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-6 relative">
+          <FadeIn>
+            <div className="text-center mb-16">
+              <h2 className="text-4xl font-bold text-white flex items-center justify-center gap-3">
+                <Scale className="w-8 h-8 text-synapse-400" />
+                Why Synapse is better
+              </h2>
+              <p className="mt-4 text-lg text-gray-400 max-w-2xl mx-auto">
+                Not marketing — the numbers and architecture choices behind the client.
+                No external HTTP stack, thread-safe metrics, failure isolation, and a real provider SPI.
+              </p>
+            </div>
+          </FadeIn>
+
+          {/* Proof stats */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-16">
+            {proofStats.map((stat, i) => (
+              <FadeIn key={stat.label} delay={i * 0.06}>
+                <div className="p-6 rounded-2xl glass-card border-gray-800/50 h-full">
+                  <div className="text-4xl font-bold gradient-text mb-2">{stat.value}</div>
+                  <div className="text-white font-medium mb-2">{stat.label}</div>
+                  <div className="text-sm text-gray-400 leading-relaxed">{stat.detail}</div>
+                </div>
+              </FadeIn>
+            ))}
+          </div>
+
+          {/* Comparison table */}
+          <FadeIn delay={0.1}>
+            <div className="text-center mb-10">
+              <h3 className="text-2xl font-bold text-white flex items-center justify-center gap-2">
+                <ShieldCheck className="w-6 h-6 text-neon-green" />
+                Synapse vs. a vendor SDK or hand-rolled client
+              </h3>
+              <p className="mt-3 text-gray-400 max-w-2xl mx-auto">
+                What you get out of the box compared with the typical approach — and what that saves you.
+              </p>
+            </div>
+          </FadeIn>
+
+          <FadeIn delay={0.15}>
+            <div className="bg-gray-900/60 rounded-2xl overflow-hidden border border-gray-800/50">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px]">
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-300 w-40">Capability</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-neon-green">Synapse</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-500">Typical approach</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800/70">
+                    {comparisonRows.map((row) => (
+                      <tr key={row.feature} className="hover:bg-gray-800/30 transition-colors">
+                        <td className="px-6 py-4 text-sm font-medium text-white align-top">{row.feature}</td>
+                        <td className="px-6 py-4 text-sm text-gray-300 align-top">
+                          <span className="flex items-start gap-2">
+                            <Check className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+                            <span>{row.synapse}</span>
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500 align-top">
+                          <span className="flex items-start gap-2">
+                            <X className="w-4 h-4 text-red-400/70 shrink-0 mt-0.5" />
+                            <span>{row.typical}</span>
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </FadeIn>
+
+          <FadeIn delay={0.2}>
+            <p className="mt-6 text-center text-sm text-gray-600">
+              All tunables shown above are real configuration defaults in <code className="text-gray-500 font-mono">SynapseConfig</code> and <code className="text-gray-500 font-mono">AbstractSynapseConfig</code>.
+            </p>
+          </FadeIn>
         </div>
       </section>
 

@@ -13,6 +13,7 @@ public class SynapseProperties {
     private String endpoint;
     private String apiKey;
     private String modelName;
+    private String provider;
     private double temperature;
     private int maxTokens;
     private Duration connectTimeout;
@@ -46,6 +47,7 @@ public class SynapseProperties {
                 .circuitBreakerOpenDuration(circuitBreakerOpenDuration)
                 .circuitBreakerFailureThreshold(circuitBreakerFailureThreshold)
                 .maxRetryElapsedTime(maxRetryElapsedTime);
+        if (provider != null) builder.provider(provider);
         if (connectTimeout != null) builder.connectTimeout(connectTimeout);
         if (readTimeout != null) builder.readTimeout(readTimeout);
         if (timeout != null) builder.timeout(timeout);
@@ -61,6 +63,8 @@ public class SynapseProperties {
     public void setApiKey(String apiKey) { this.apiKey = apiKey; }
     public String getModelName() { return modelName; }
     public void setModelName(String modelName) { this.modelName = modelName; }
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
     public double getTemperature() { return temperature; }
     public void setTemperature(double temperature) { this.temperature = temperature; }
     public int getMaxTokens() { return maxTokens; }

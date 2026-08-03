@@ -1,6 +1,25 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-synapse-50: #f0f4ff;
+  --color-synapse-100: #dbe4ff;
+  --color-synapse-200: #bac8ff;
+  --color-synapse-300: #91a7ff;
+  --color-synapse-400: #748ffc;
+  --color-synapse-500: #5c7cfa;
+  --color-synapse-600: #4c6ef5;
+  --color-synapse-700: #4263eb;
+  --color-synapse-800: #3b5bdb;
+  --color-synapse-900: #364fc7;
+  --color-synapse-950: #1e3a8a;
+
+  --color-neon-green: #00ff88;
+  --color-neon-blue: #00d4ff;
+  --color-neon-purple: #8b5cf6;
+
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
 
 @layer base {
   * {

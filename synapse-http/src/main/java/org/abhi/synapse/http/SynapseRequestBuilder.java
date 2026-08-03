@@ -1,6 +1,7 @@
 package org.abhi.synapse.http;
 
 import org.abhi.synapse.config.SynapseConfig;
+import org.abhi.synapse.core.ProviderAdapter;
 import org.abhi.synapse.core.exception.SynapseException;
 import org.abhi.synapse.core.model.ChatMessage;
 
@@ -10,7 +11,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +35,7 @@ class SynapseRequestBuilder {
 
     private final SynapseConfig config;
     private final ObjectMapper objectMapper;
+    private final ProviderAdapter adapter;
 
     /**
      * Constructs a new {@code SynapseRequestBuilder} with the specified configuration
@@ -44,11 +45,14 @@ class SynapseRequestBuilder {
      *                     must not be {@code null}
      * @param objectMapper the {@link ObjectMapper} to use for JSON serialization;
      *                     must not be {@code null}
+     * @param adapter      the {@link ProviderAdapter} used to build provider-specific
+     *                     URLs, headers, and request bodies; must not be {@code null}
      * @since 1.0.0
      */
-    SynapseRequestBuilder(SynapseConfig config, ObjectMapper objectMapper) {
+    SynapseRequestBuilder(SynapseConfig config, ObjectMapper objectMapper, ProviderAdapter adapter) {
         this.config = config;
         this.objectMapper = objectMapper;
+        this.adapter = adapter;
     }
 
     /**
@@ -62,7 +66,7 @@ class SynapseRequestBuilder {
      * @since 1.0.0
      */
     String buildUrl() {
-        return config.getBaseUrl().replaceAll("/+$", "") + config.getEndpoint();
+        return adapter.buildUrl(config.getBaseUrl(), config.getEndpoint());
     }
 
     /**
@@ -90,15 +94,7 @@ class SynapseRequestBuilder {
     }
 
     Map<String, Object> buildMessagesBody(List<ChatMessage> messages, boolean stream, String modelName) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("model", modelName);
-        body.put("messages", messages);
-        body.put("temperature", config.getTemperature());
-        body.put("max_tokens", config.getMaxTokens());
-        if (stream) {
-            body.put("stream", true);
-        }
-        return body;
+        return adapter.buildChatBody(messages, config.getTemperature(), config.getMaxTokens(), modelName, stream);
     }
 
     String replaceModelInBody(String requestBody, String modelName) throws SynapseException {
@@ -153,8 +149,7 @@ class SynapseRequestBuilder {
     HttpRequest buildPostRequest(String url, String body) {
         return HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + config.getApiKey())
+                .headers(buildHeaderArray(adapter.buildHeaders(config.getApiKey())))
                 .timeout(config.getRequestTimeout())
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
@@ -164,10 +159,19 @@ class SynapseRequestBuilder {
     HttpRequest buildGetRequest(String url) {
         return HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + config.getApiKey())
+                .headers(buildHeaderArray(adapter.buildHeaders(config.getApiKey())))
                 .timeout(config.getRequestTimeout())
                 .GET()
                 .build();
+    }
+
+    private static String[] buildHeaderArray(Map<String, String> headers) {
+        String[] array = new String[headers.size() * 2];
+        int i = 0;
+        for (Map.Entry<String, String> e : headers.entrySet()) {
+            array[i++] = e.getKey();
+            array[i++] = e.getValue();
+        }
+        return array;
     }
 }

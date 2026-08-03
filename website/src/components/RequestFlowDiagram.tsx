@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { AlertTriangle, CheckCircle2, XCircle, Clock, ArrowDown, ArrowRight } from 'lucide-react'
 
 interface FlowStep {

@@ -15,6 +15,7 @@ public class SynapseConfig extends AbstractSynapseConfig {
     private final String endpoint;
     private final String apiKey;
     private final String modelName;
+    private final String provider;
     private final SynapseRequestInterceptor requestInterceptor;
     private final SynapseResponseInterceptor responseInterceptor;
     private final SynapseRetryPolicy retryPolicy;
@@ -33,6 +34,7 @@ public class SynapseConfig extends AbstractSynapseConfig {
         this.endpoint = builder.endpoint;
         this.apiKey = builder.apiKey;
         this.modelName = builder.modelName;
+        this.provider = builder.provider;
         this.requestInterceptor = builder.requestInterceptor;
         this.responseInterceptor = builder.responseInterceptor;
         this.retryPolicy = builder.retryPolicy;
@@ -48,12 +50,14 @@ public class SynapseConfig extends AbstractSynapseConfig {
         if (endpoint == null || endpoint.isBlank()) throw new SynapseException("endpoint is required");
         if (apiKey == null || apiKey.isBlank()) throw new SynapseException("apiKey is required");
         if (modelName == null || modelName.isBlank()) throw new SynapseException("modelName is required");
+        if (provider == null || provider.isBlank()) throw new SynapseException("provider is required");
     }
 
     public String getBaseUrl() { return baseUrl; }
     public String getEndpoint() { return endpoint; }
     public String getApiKey() { return apiKey; }
     public String getModelName() { return modelName; }
+    public String getProvider() { return provider; }
     public SynapseRequestInterceptor getRequestInterceptor() { return requestInterceptor; }
     public SynapseResponseInterceptor getResponseInterceptor() { return responseInterceptor; }
     public SynapseRetryPolicy getRetryPolicy() { return retryPolicy; }
@@ -74,8 +78,9 @@ public class SynapseConfig extends AbstractSynapseConfig {
     public static class Builder {
         private String baseUrl;
         private String endpoint;
-        private String apiKey;
-        private String modelName;
+    private String apiKey;
+    private String modelName;
+    private String provider = "openai";
         private double temperature = DEFAULT_TEMPERATURE;
         private int maxTokens = DEFAULT_MAX_TOKENS;
         private Duration connectTimeout = DEFAULT_CONNECT_TIMEOUT;
@@ -99,6 +104,7 @@ public class SynapseConfig extends AbstractSynapseConfig {
         public Builder endpoint(String endpoint) { this.endpoint = endpoint; return this; }
         public Builder apiKey(String apiKey) { this.apiKey = apiKey; return this; }
         public Builder modelName(String modelName) { this.modelName = modelName; return this; }
+        public Builder provider(String provider) { this.provider = provider; return this; }
         public Builder temperature(double temperature) { this.temperature = temperature; return this; }
         public Builder maxTokens(int maxTokens) { this.maxTokens = maxTokens; return this; }
         public Builder connectTimeout(Duration connectTimeout) { this.connectTimeout = connectTimeout; return this; }

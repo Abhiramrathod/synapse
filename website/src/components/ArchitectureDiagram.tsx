@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion } from 'motion/react'
 import { Code2, Workflow, Shield, RefreshCw, Gauge, Blocks, Globe } from 'lucide-react'
 
 const layers = [

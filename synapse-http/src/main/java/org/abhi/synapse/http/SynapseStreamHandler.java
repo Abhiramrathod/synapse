@@ -1,12 +1,11 @@
 package org.abhi.synapse.http;
 
+import org.abhi.synapse.core.ProviderAdapter;
 import org.abhi.synapse.core.StreamListener;
 import org.abhi.synapse.core.exception.SynapseException;
 import org.abhi.synapse.core.CancellationToken;
 import org.abhi.synapse.core.model.SynapseResponse;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,11 +18,11 @@ class SynapseStreamHandler {
     private static final Logger log = LoggerFactory.getLogger(SynapseStreamHandler.class);
 
     private final SynapseHttpClient httpClient;
-    private final ObjectMapper objectMapper;
+    private final ProviderAdapter adapter;
 
-    SynapseStreamHandler(SynapseHttpClient httpClient, ObjectMapper objectMapper) {
+    SynapseStreamHandler(SynapseHttpClient httpClient, ProviderAdapter adapter) {
         this.httpClient = httpClient;
-        this.objectMapper = objectMapper;
+        this.adapter = adapter;
     }
 
     void handle(HttpRequest request, java.util.function.Consumer<String> onChunk, boolean enableLogging)
@@ -47,23 +46,19 @@ class SynapseStreamHandler {
                 if (token != null && token.isCancelled()) {
                     return;
                 }
-                if (line.startsWith("data: ")) {
-                    String data = line.substring(6).trim();
-                    if (data.equals("[DONE]") || data.equals("\"message_stop\"")) {
-                        return;
+                String data = adapter.extractStreamData(line);
+                if (data == null || adapter.isStreamDone(data)) {
+                    return;
+                }
+                try {
+                    String content = adapter.extractContentFromStreamChunk(data);
+                    if (!content.isEmpty()) {
+                        accumulatedContent.append(content);
+                        listener.onChunk(content);
                     }
-                    try {
-                        JsonNode node = objectMapper.readTree(data);
-                        String content = node.path("choices").path(0)
-                                .path("delta").path("content").asText("");
-                        if (!content.isEmpty()) {
-                            accumulatedContent.append(content);
-                            listener.onChunk(content);
-                        }
-                    } catch (Exception e) {
-                        if (enableLogging) {
-                            log.warn("[Synapse] Failed to parse stream chunk: {}", data);
-                        }
+                } catch (Exception e) {
+                    if (enableLogging) {
+                        log.warn("[Synapse] Failed to parse stream chunk: {}", data);
                     }
                 }
             });
@@ -100,22 +95,18 @@ class SynapseStreamHandler {
                 if (token != null && token.isCancelled()) {
                     return;
                 }
-                if (line.startsWith("data: ")) {
-                    String data = line.substring(6).trim();
-                    if (data.equals("[DONE]") || data.equals("\"message_stop\"")) {
-                        return;
+                String data = adapter.extractStreamData(line);
+                if (data == null || adapter.isStreamDone(data)) {
+                    return;
+                }
+                try {
+                    String content = adapter.extractContentFromStreamChunk(data);
+                    if (!content.isEmpty()) {
+                        publisher.submit(content);
                     }
-                    try {
-                        JsonNode node = objectMapper.readTree(data);
-                        String content = node.path("choices").path(0)
-                                .path("delta").path("content").asText("");
-                        if (!content.isEmpty()) {
-                            publisher.submit(content);
-                        }
-                    } catch (Exception e) {
-                        if (enableLogging) {
-                            log.warn("[Synapse] Failed to parse stream chunk: {}", data);
-                        }
+                } catch (Exception e) {
+                    if (enableLogging) {
+                        log.warn("[Synapse] Failed to parse stream chunk: {}", data);
                     }
                 }
             });

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Package, Play, Code2, Wrench, Settings, ArrowRight, CheckCircle2, Copy, Terminal, Check, X } from 'lucide-react'
+import { Link } from 'react-router'
+import { motion } from 'motion/react'
+import { Package, Play, Code2, Wrench, Settings, ArrowRight, CheckCircle2, Copy, Terminal, Check, X, Plug } from 'lucide-react'
 import FadeIn from '../components/FadeIn'
+import PageMeta from '../components/PageMeta'
 import CodeBlock from '../components/CodeBlock'
 import Badge from '../components/Badge'
 import {
@@ -15,6 +16,11 @@ import {
   retryPolicyCode,
   fullConfigCode,
   errorHandlingCode,
+  providerAdapterContractCode,
+  anthropicAdapterCode,
+  providerServiceFileCode,
+  providerSpiConfigCode,
+  providerSpiYamlCode,
 } from '../data/codeExamples'
 import { exceptionTypes } from '../data/content'
 
@@ -29,6 +35,10 @@ export default function GettingStartedPage() {
 
   return (
     <div className="min-h-screen">
+      <PageMeta
+        title="Getting Started - Synapse"
+        description="Install Synapse in minutes and make your first LLM API call. Covers Maven setup, Spring Boot starter, streaming, interceptors, retries, and custom provider integration."
+      />
       {/* Page Header */}
       <section className="relative py-20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-synapse-600/5 via-transparent to-transparent" />
@@ -396,6 +406,112 @@ public class LlmService {
               </div>
             </FadeIn>
           </div>
+        </div>
+      </section>
+
+      {/* Provider SPI */}
+      <section className="py-16">
+        <div className="max-w-5xl mx-auto px-6">
+          <FadeIn>
+            <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+              <Plug className="w-6 h-6 text-synapse-400" />
+              Provider SPI — Bring Your Own Provider
+            </h2>
+            <p className="text-gray-400 mb-8 max-w-2xl">
+              Synapse is provider-agnostic by design. Every provider is a class implementing{' '}
+              <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">ProviderAdapter</code>{' '}
+              registered through Java's <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">ServiceLoader</code>.
+              Adding a new provider requires one class and one registration file — no changes to Synapse itself.
+            </p>
+          </FadeIn>
+
+          <div className="space-y-8">
+            {/* The contract */}
+            <FadeIn delay={0.1}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50">
+                  <h3 className="text-lg font-semibold text-white">The contract</h3>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Implement these methods to control URLs, auth headers, request bodies, response parsing, models listing, and SSE framing.
+                  </p>
+                </div>
+                <CodeBlock code={providerAdapterContractCode} language="java" title="ProviderAdapter" />
+              </div>
+            </FadeIn>
+
+            {/* Step 1: implement */}
+            <FadeIn delay={0.15}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-synapse-600 text-white flex items-center justify-center text-xs font-bold">1</div>
+                  <span className="text-sm font-medium text-white">Implement the adapter — Anthropic example</span>
+                  <span className="text-xs text-gray-500 ml-auto">x-api-key auth, top-level system field, delta.text streaming</span>
+                </div>
+                <CodeBlock code={anthropicAdapterCode} language="java" title="AnthropicProviderAdapter.java" />
+              </div>
+            </FadeIn>
+
+            {/* Step 2: register */}
+            <FadeIn delay={0.2}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-synapse-600 text-white flex items-center justify-center text-xs font-bold">2</div>
+                  <span className="text-sm font-medium text-white">Register for ServiceLoader discovery</span>
+                </div>
+                <CodeBlock code={providerServiceFileCode} language="text" title="META-INF/services/org.abhi.synapse.core.ProviderAdapter" showLineNumbers={false} />
+              </div>
+            </FadeIn>
+
+            {/* Step 3: select */}
+            <FadeIn delay={0.25}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-synapse-600 text-white flex items-center justify-center text-xs font-bold">3</div>
+                  <span className="text-sm font-medium text-white">Select it in configuration</span>
+                </div>
+                <CodeBlock code={providerSpiConfigCode} language="java" title="ProviderConfig.java" />
+              </div>
+            </FadeIn>
+
+            {/* Spring yaml */}
+            <FadeIn delay={0.3}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400" />
+                  <span className="text-sm font-medium text-white">Spring Boot</span>
+                  <span className="text-xs text-gray-500 ml-auto">synapse.provider selects the adapter</span>
+                </div>
+                <CodeBlock code={providerSpiYamlCode} language="yaml" title="application.yml" showLineNumbers={false} />
+              </div>
+            </FadeIn>
+          </div>
+
+          {/* Resolution note */}
+          <FadeIn delay={0.35}>
+            <div className="mt-8 p-6 rounded-2xl border border-synapse-500/20 bg-synapse-600/5">
+              <h4 className="text-white font-semibold mb-2 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-synapse-400" />
+                How resolution works
+              </h4>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li>
+                  At hub construction, Synapse scans{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">ServiceLoader.load(ProviderAdapter.class)</code>{' '}
+                  and selects the adapter whose <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">providerName()</code> matches{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">config.provider</code> (default: <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">openai</code>).
+                </li>
+                <li>
+                  No match → construction fails with an{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">IllegalArgumentException</code>{' '}
+                  listing every registered provider, e.g. <code className="text-gray-300">No ProviderAdapter registered for provider 'gemini'. Registered providers: openai</code>.
+                </li>
+                <li>
+                  Because request bodies, auth headers, URLs, response parsing, and SSE framing are delegated to the adapter,
+                  switching providers is a one-line config change — your ISynapseHub code, streaming, retries, metrics, and interceptors stay identical.
+                </li>
+              </ul>
+            </div>
+          </FadeIn>
         </div>
       </section>
 

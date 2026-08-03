@@ -138,6 +138,7 @@ export const fullConfigCode = `SynapseConfig config = SynapseConfig.builder()
         .endpoint("/v1/chat/completions")
         .apiKey(System.getenv("OPENAI_API_KEY"))
         .modelName("gpt-4")
+        .provider("openai")         // matches registered ProviderAdapter
         .temperature(0.7)
         .maxTokens(2048)
         .connectTimeout(Duration.ofSeconds(5))
@@ -202,3 +203,178 @@ export const mavenXml = `<!-- JitPack Repository -->
     <artifactId>synapse-spring-boot-starter</artifactId>
     <version>TAG</version>
 </dependency>`
+
+export const providerAdapterContractCode = `public interface ProviderAdapter {
+    // unique id, matched against config.provider
+    String providerName();
+
+    // request URL construction
+    String buildUrl(String baseUrl, String endpoint);
+
+    // auth headers (Bearer, x-api-key, ...)
+    Map<String, String> buildAuthHeaders(String apiKey);
+
+    // request body for chat completions
+    Map<String, Object> buildChatBody(List<ChatMessage> messages,
+        double temperature, int maxTokens, String modelName,
+        boolean streaming, List<ToolDefinition> tools, String responseFormat);
+
+    // non-streaming response -> SynapseResponse
+    SynapseResponse parseResponse(String responseBody);
+
+    // /models response -> List<Model>
+    List<Model> parseModels(String responseBody);
+
+    // one SSE chunk -> text delta
+    String extractContentFromStreamChunk(String jsonData);
+
+    // is the stream finished?
+    boolean isStreamDone(String line);
+
+    // SSE framing (default handles "data: " lines)
+    default String extractStreamData(String line) { ... }
+}`
+
+export const anthropicAdapterCode = `package com.myapp.provider;
+
+import org.abhi.synapse.core.ProviderAdapter;
+import org.abhi.synapse.core.exception.SynapseException;
+import org.abhi.synapse.core.model.*;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.*;
+
+public class AnthropicProviderAdapter implements ProviderAdapter {
+
+    private final ObjectMapper objectMapper;
+
+    public AnthropicProviderAdapter() { this(new ObjectMapper()); }
+    public AnthropicProviderAdapter(ObjectMapper objectMapper) { this.objectMapper = objectMapper; }
+
+    @Override
+    public String providerName() { return "anthropic"; }
+
+    @Override
+    public String buildUrl(String baseUrl, String endpoint) {
+        return baseUrl.replaceAll("/+$", "") + endpoint;
+    }
+
+    @Override
+    public Map<String, String> buildAuthHeaders(String apiKey) {
+        Map<String, String> h = new HashMap<>();
+        h.put("x-api-key", apiKey);                 // not Bearer!
+        h.put("anthropic-version", "2023-06-01");
+        return h;
+    }
+
+    @Override
+    public Map<String, Object> buildChatBody(List<ChatMessage> messages,
+            double temperature, int maxTokens, String modelName, boolean streaming,
+            List<ToolDefinition> tools, String responseFormat) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", modelName);
+        body.put("max_tokens", maxTokens);
+        body.put("temperature", temperature);
+        if (streaming) body.put("stream", true);
+
+        StringBuilder system = new StringBuilder();
+        List<Map<String, Object>> msgs = new ArrayList<>();
+        for (ChatMessage m : messages) {
+            if ("system".equals(m.getRole())) {
+                system.append(m.getContent()).append("\\n");   // top-level system field
+            } else {
+                Map<String, Object> msg = new HashMap<>();
+                msg.put("role", m.getRole());
+                msg.put("content", m.getContent());
+                msgs.add(msg);
+            }
+        }
+        if (system.length() > 0) body.put("system", system.toString().trim());
+        body.put("messages", msgs);
+        return body;
+    }
+
+    @Override
+    public SynapseResponse parseResponse(String responseBody) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            SynapseResponse response = new SynapseResponse();
+            response.setModel(root.path("model").asText(null));
+            response.setContent(root.path("content").path(0).path("text").asText(""));
+            response.setFinishReason(root.path("stop_reason").asText(null));
+            JsonNode usage = root.path("usage");
+            response.setPromptTokens(usage.path("input_tokens").asInt(0));
+            response.setCompletionTokens(usage.path("output_tokens").asInt(0));
+            return response;
+        } catch (Exception e) {
+            throw new SynapseException("Failed to parse Anthropic response", e,
+                    SynapseException.ExceptionType.PARSE_ERROR);
+        }
+    }
+
+    @Override
+    public List<Model> parseModels(String responseBody) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            List<Model> models = new ArrayList<>();
+            for (JsonNode n : root.path("data")) {
+                models.add(Model.builder()
+                        .id(n.path("id").asText(null))
+                        .ownedBy(n.path("display_name").asText(null))
+                        .build());
+            }
+            return models;
+        } catch (Exception e) {
+            throw new SynapseException("Failed to parse models response", e,
+                    SynapseException.ExceptionType.PARSE_ERROR);
+        }
+    }
+
+    @Override
+    public String extractStreamData(String line) {
+        if (line == null) return null;
+        String t = line.trim();
+        return t.startsWith("data:") && t.substring(5).trim().startsWith("{")
+                ? t.substring(5).trim() : null;
+    }
+
+    @Override
+    public String extractContentFromStreamChunk(String jsonData) {
+        try {
+            return objectMapper.readTree(jsonData)
+                    .path("delta").path("text").asText("");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    @Override
+    public boolean isStreamDone(String line) {
+        return line == null || line.contains("message_stop");
+    }
+}`
+
+export const providerServiceFileCode = `# src/main/resources/META-INF/services/org.abhi.synapse.core.ProviderAdapter
+com.myapp.provider.AnthropicProviderAdapter`
+
+export const providerSpiConfigCode = `SynapseConfig config = SynapseConfig.builder()
+        .baseUrl("https://api.anthropic.com")
+        .endpoint("/v1/messages")
+        .apiKey(System.getenv("ANTHROPIC_API_KEY"))
+        .modelName("claude-3-5-sonnet-20240620")
+        .provider("anthropic")      // matches providerName()
+        .build();
+
+try (SynapseHub hub = new SynapseHub(config)) {
+    // Same API as OpenAI — no code changes required
+    SynapseResponse response = hub.sendPrompt("Explain the contract.", null);
+    System.out.println(response.getContent());
+}`
+
+export const providerSpiYamlCode = `# application.yml
+synapse:
+  base-url: https://api.anthropic.com
+  endpoint: /v1/messages
+  api-key: \${ANTHROPIC_API_KEY}
+  model-name: claude-3-5-sonnet-20240620
+  provider: anthropic`

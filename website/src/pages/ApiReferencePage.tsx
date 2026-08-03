@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import { Search, Code2, FileText, ChevronRight, ArrowRight, Info } from 'lucide-react'
 import FadeIn from '../components/FadeIn'
+import PageMeta from '../components/PageMeta'
 import CodeBlock from '../components/CodeBlock'
 import Badge from '../components/Badge'
 import { apiMethods, exceptionTypes } from '../data/content'
@@ -16,6 +17,7 @@ const navItems: NavItem[] = [
   { id: 'isynapsehub', label: 'ISynapseHub' },
   { id: 'synapsehub', label: 'SynapseHub' },
   { id: 'synapseconfig', label: 'SynapseConfig' },
+  { id: 'provideradapter', label: 'ProviderAdapter' },
   { id: 'chatmessage', label: 'ChatMessage' },
   { id: 'model', label: 'Model' },
   { id: 'synapseresponse', label: 'SynapseResponse' },
@@ -30,6 +32,7 @@ const configBuilderMethods = [
   { name: 'endpoint', type: 'String', description: 'API endpoint path' },
   { name: 'apiKey', type: 'String', description: 'Authentication API key (redacted in toString)' },
   { name: 'modelName', type: 'String', description: 'Default model identifier' },
+  { name: 'provider', type: 'String', description: 'Provider name matched against a registered ProviderAdapter (default: "openai")' },
   { name: 'temperature', type: 'double', description: 'Sampling temperature (0.0 - 2.0)' },
   { name: 'maxTokens', type: 'int', description: 'Maximum tokens in response' },
   { name: 'connectTimeout', type: 'Duration', description: 'TCP connect timeout' },
@@ -112,6 +115,40 @@ const metricsListenerInterfaceCode = `public interface SynapseMetricsListener {
     default void onRequestStarted(String model) {}
     default void onRequestCompleted(SynapseMetricsSummary summary) {}
     default void onRequestFailed(SynapseMetricsSummary summary, SynapseException error) {}
+}`
+
+const providerAdapterInterfaceCode = `public interface ProviderAdapter {
+    // Unique provider id matched against config.provider
+    String providerName();
+
+    // Request URL construction
+    String buildUrl(String baseUrl, String endpoint);
+
+    // Auth headers (Bearer, x-api-key, ...)
+    Map<String, String> buildAuthHeaders(String apiKey);
+
+    // Request body for chat completions
+    Map<String, Object> buildChatBody(List<ChatMessage> messages,
+        double temperature, int maxTokens, String modelName,
+        boolean streaming, List<ToolDefinition> tools, String responseFormat);
+
+    // Non-streaming response -> SynapseResponse
+    SynapseResponse parseResponse(String responseBody);
+
+    // /models response -> List<Model>
+    List<Model> parseModels(String responseBody);
+
+    // One SSE chunk -> text delta
+    String extractContentFromStreamChunk(String jsonData);
+
+    // Is the stream finished?
+    boolean isStreamDone(String line);
+
+    // SSE framing — default handles "data: " lines
+    default String extractStreamData(String line) { ... }
+
+    // Models list URL — default is OpenAI-compatible
+    default String buildModelsUrl(String baseUrl) { ... }
 }`
 
 export default function ApiReferencePage() {
@@ -204,6 +241,10 @@ for (Model model : models) {
 
   return (
     <div className="min-h-screen bg-gray-950 py-12">
+      <PageMeta
+        title="API Reference - Synapse"
+        description="Comprehensive documentation for all classes, interfaces, and methods in the Synapse library: ISynapseHub, SynapseHub, SynapseConfig, ProviderAdapter, ChatMessage, Model, SynapseResponse, SynapseException, interceptors, and retry policy."
+      />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <FadeIn>
           <div className="mb-12">
@@ -385,6 +426,70 @@ for (Model model : models) {
                 </div>
 
                 <CodeBlock code={fullConfigCode} title="Full Configuration" />
+              </section>
+            </FadeIn>
+
+            {/* ProviderAdapter */}
+            <FadeIn>
+              <section id="provideradapter">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <Code2 className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">ProviderAdapter</h2>
+                  <Badge variant="purple">interface</Badge>
+                </div>
+                <p className="text-gray-400 mb-6">
+                  The Service Provider Interface (SPI) for LLM providers. Implement this interface to support
+                  any provider — request bodies, auth headers, URLs, response parsing, models listing, and SSE
+                  framing are all delegated to the adapter selected by{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">config.provider</code>.
+                </p>
+
+                <div className="glass-card overflow-hidden mb-6">
+                  <div className="p-4 border-b border-gray-800/50">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      Contract Methods
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-gray-800/50">
+                    {[
+                      { method: 'providerName()', type: 'String', description: 'Unique id matched against config.provider' },
+                      { method: 'buildUrl(baseUrl, endpoint)', type: 'String', description: 'Construct the request URL' },
+                      { method: 'buildAuthHeaders(apiKey)', type: 'Map', description: 'Auth headers (Bearer, x-api-key, anthropic-version, ...)' },
+                      { method: 'buildChatBody(...)', type: 'Map', description: 'Request body for chat completions' },
+                      { method: 'parseResponse(body)', type: 'SynapseResponse', description: 'Parse a non-streaming response' },
+                      { method: 'parseModels(body)', type: 'List<Model>', description: 'Parse the /models response' },
+                      { method: 'extractContentFromStreamChunk(json)', type: 'String', description: 'Extract the text delta from one SSE chunk' },
+                      { method: 'isStreamDone(line)', type: 'boolean', description: 'Detect stream completion' },
+                      { method: 'extractStreamData(line)', type: 'String', description: 'Default: unwrap "data: " SSE frames' },
+                      { method: 'buildModelsUrl(baseUrl)', type: 'String', description: 'Default: OpenAI-compatible /v1/models URL' },
+                    ].map((item) => (
+                      <div key={item.method} className="px-4 py-3 flex items-center gap-4">
+                        <span className="font-mono text-synapse-400 text-sm min-w-[300px]">{item.method}</span>
+                        <span className="font-mono text-gray-500 text-xs min-w-[90px]">{item.type}</span>
+                        <span className="text-gray-400 text-sm flex-1">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="glass-card p-6 mb-6">
+                  <h4 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
+                    <Info className="w-4 h-4 text-synapse-400" />
+                    Resolution
+                  </h4>
+                  <p className="text-sm text-gray-400 mb-3">
+                    At hub construction, Synapse scans <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">ServiceLoader.load(ProviderAdapter.class)</code>{' '}
+                    and picks the adapter whose <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">providerName()</code>{' '}
+                    matches <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">config.provider</code>{' '}
+                    (default <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">openai</code>). Register an implementation by adding its
+                    fully-qualified class name to <code className="text-gray-300 font-mono">META-INF/services/org.abhi.synapse.core.ProviderAdapter</code>.
+                  </p>
+                </div>
+
+                <CodeBlock code={providerAdapterInterfaceCode} title="ProviderAdapter Interface" />
               </section>
             </FadeIn>
 

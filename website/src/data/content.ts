@@ -76,7 +76,7 @@ export const modules = [
     description: 'Core interfaces, models, and exceptions',
     icon: Code2,
     color: 'from-synapse-500 to-synapse-700',
-    items: ['ISynapseHub', 'ChatMessage', 'SynapseResponse', 'SynapseException', 'Model', 'ToolCall', 'ToolDefinition', 'RequestOptions', 'StreamListener', 'StreamHandle', 'CancellationToken'],
+    items: ['ISynapseHub', 'ProviderAdapter', 'ChatMessage', 'SynapseResponse', 'SynapseException', 'Model', 'ToolCall', 'ToolDefinition', 'RequestOptions', 'StreamListener', 'StreamHandle', 'CancellationToken'],
   },
   {
     name: 'synapse-interceptors',
@@ -97,7 +97,7 @@ export const modules = [
     description: 'HTTP transport and orchestration',
     icon: Blocks,
     color: 'from-neon-green/80 to-green-700',
-    items: ['SynapseHub', 'HttpClient', 'StreamHandler', 'RetryHandler', 'CircuitBreaker', 'ConcurrencyLimiter'],
+    items: ['SynapseHub', 'OpenAiProviderAdapter', 'HttpClient', 'StreamHandler', 'RetryHandler', 'CircuitBreaker', 'ConcurrencyLimiter'],
   },
   {
     name: 'synapse-metrics',
@@ -199,5 +199,67 @@ export const apiMethods = [
     signature: 'close()',
     description: 'Shut down the hub, releasing HttpClient and thread pool.',
     module: 'synapse-core',
+  },
+]
+
+export const proofStats = [
+  { value: '0', label: 'HTTP dependencies', detail: 'Uses the JDK java.net.http.HttpClient — no OkHttp, no Retrofit, no vendor HTTP stack.' },
+  { value: '12', label: 'methods in ISynapseHub', detail: 'One interface covers sync, async, streaming, reactive flow, and models listing.' },
+  { value: '3', label: 'circuit breaker states', detail: 'CLOSED → OPEN → HALF_OPEN with configurable failure threshold (default 5) and open duration (default 30s).' },
+  { value: '4', label: 'split timeouts', detail: 'connect (10s), read (30s), request deadline (60s), and stream idle (120s) — tuned independently.' },
+  { value: '64', label: 'default concurrent requests', detail: 'Semaphore-based concurrency limiter prevents thundering-herd 429s under load.' },
+  { value: '9', label: 'typed exceptions', detail: 'CONFIG, NETWORK, TIMEOUT, RATE_LIMIT, SERVER, PARSE, STREAMING, RETRY_EXHAUSTED, CIRCUIT_BREAKER_OPEN — each with a retryable flag.' },
+]
+
+export const comparisonRows = [
+  {
+    feature: 'Multi-provider support',
+    synapse: 'ProviderAdapter SPI via ServiceLoader. Add a provider with one class + one registration file; no core changes.',
+    typical: 'Hardcoded to one vendor SDK; switching vendors means a new dependency, new API, and a rewrite.',
+  },
+  {
+    feature: 'HTTP transport',
+    synapse: 'Zero external HTTP deps — JDK HttpClient (HTTP/2, connection pooling, async).',
+    typical: 'OkHttp / Retrofit / vendor SDK — extra transitive dependencies and version conflicts.',
+  },
+  {
+    feature: 'Retry logic',
+    synapse: 'Jittered exponential backoff + Retry-After header parsing + max-elapsed-time budget (default 120s).',
+    typical: 'Fixed sleep loops or no retry — retry storms that make 429s worse.',
+  },
+  {
+    feature: 'Failure isolation',
+    synapse: '3-state circuit breaker + semaphore concurrency limiter (default 64) + per-minute rate cap.',
+    typical: 'No protection — one failing call cascades into N concurrent failures.',
+  },
+  {
+    feature: 'Streaming',
+    synapse: 'SSE via StreamListener, cancellable StreamHandle, and reactive Flow.Publisher. Provider-specific SSE framing handled per adapter.',
+    typical: 'Manual thread + InputStream parsing; no cancellation, no provider abstraction.',
+  },
+  {
+    feature: 'Timeouts',
+    synapse: '4 independent timeouts (connect, read, request, stream idle).',
+    typical: 'A single socket read timeout — hangs or premature failures either way.',
+  },
+  {
+    feature: 'Metrics',
+    synapse: 'Thread-safe LongAdder counters + CopyOnWriteArrayList samples; token usage and latency; Micrometer/OTel adapters.',
+    typical: 'No metrics, or HashMap counters that lose increments under contention.',
+  },
+  {
+    feature: 'Error model',
+    synapse: '9 typed exceptions with retryable flags and HTTP status/body context.',
+    typical: 'Generic IOException / RuntimeException — no guidance on what to retry.',
+  },
+  {
+    feature: 'Security',
+    synapse: 'API keys masked in toString(), correlation IDs on every request, split timeout config.',
+    typical: 'Keys and tokens visible in logs; no request correlation.',
+  },
+  {
+    feature: 'Extensibility',
+    synapse: 'Interceptors for request/response lifecycle, pluggable retry policy, custom metrics listeners.',
+    typical: 'Fork the vendor SDK or write your own wrapper from scratch.',
   },
 ]
