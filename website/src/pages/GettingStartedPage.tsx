@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { motion } from 'motion/react'
-import { Package, Play, Code2, Wrench, Settings, ArrowRight, CheckCircle2, Copy, Terminal, Check, X, Plug } from 'lucide-react'
+import { Package, Play, Code2, Wrench, Settings, ArrowRight, CheckCircle2, Copy, Terminal, Check, X, Plug, Database, Shuffle, Route, SlidersHorizontal, KeyRound } from 'lucide-react'
 import FadeIn from '../components/FadeIn'
 import PageMeta from '../components/PageMeta'
 import CodeBlock from '../components/CodeBlock'
@@ -21,6 +21,12 @@ import {
   providerServiceFileCode,
   providerSpiConfigCode,
   providerSpiYamlCode,
+  responseCacheCode,
+  fallbackHubCode,
+  loadBalancingHubCode,
+  streamFlowCode,
+  dynamicReconfigCode,
+  tokenProviderCode,
 } from '../data/codeExamples'
 import { exceptionTypes } from '../data/content'
 
@@ -403,6 +409,120 @@ public class LlmService {
                   <p className="text-sm text-gray-400 mt-1">Structured exception types with retryable flags for robust error handling.</p>
                 </div>
                 <CodeBlock code={errorHandlingCode} language="java" title="ErrorHandling.java" />
+              </div>
+            </FadeIn>
+          </div>
+        </div>
+      </section>
+
+      {/* Production Patterns */}
+      <section className="py-16">
+        <div className="max-w-5xl mx-auto px-6">
+          <FadeIn>
+            <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+              <Wrench className="w-6 h-6 text-synapse-400" />
+              Production Patterns
+            </h2>
+            <p className="text-gray-400 mb-8 max-w-2xl">
+              Caching, resilience, live reconfiguration, and rotating credentials — the patterns
+              that take a demo client to production.
+            </p>
+          </FadeIn>
+
+          <div className="space-y-8">
+            {/* Response Caching */}
+            <FadeIn delay={0.1}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                    <Database className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Response Caching</h3>
+                    <p className="text-sm text-gray-400 mt-0.5">Serve repeated prompts from a Caffeine or Redis cache instead of the provider.</p>
+                  </div>
+                </div>
+                <CodeBlock code={responseCacheCode} language="java" title="ResponseCache.java" />
+              </div>
+            </FadeIn>
+
+            {/* Fallback Hub */}
+            <FadeIn delay={0.15}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                    <Shuffle className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Fallback Hub</h3>
+                    <p className="text-sm text-gray-400 mt-0.5">Route around failed providers automatically.</p>
+                  </div>
+                </div>
+                <CodeBlock code={fallbackHubCode} language="java" title="FallbackSynapseHub.java" />
+              </div>
+            </FadeIn>
+
+            {/* Load Balancing Hub */}
+            <FadeIn delay={0.2}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                    <Shuffle className="w-5 h-5 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Load Balancing</h3>
+                    <p className="text-sm text-gray-400 mt-0.5">Round-robin across accounts, regions, or API keys — and combine with fallback.</p>
+                  </div>
+                </div>
+                <CodeBlock code={loadBalancingHubCode} language="java" title="LoadBalancingSynapseHub.java" />
+              </div>
+            </FadeIn>
+
+            {/* StreamFlow */}
+            <FadeIn delay={0.25}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center">
+                    <Route className="w-5 h-5 text-teal-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Fluent Stream Processing</h3>
+                    <p className="text-sm text-gray-400 mt-0.5">Compose reactive token streams without Flow.Subscriber boilerplate.</p>
+                  </div>
+                </div>
+                <CodeBlock code={streamFlowCode} language="java" title="StreamFlow.java" />
+              </div>
+            </FadeIn>
+
+            {/* Dynamic Reconfiguration */}
+            <FadeIn delay={0.3}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+                    <SlidersHorizontal className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Dynamic Reconfiguration</h3>
+                    <p className="text-sm text-gray-400 mt-0.5">Rotate keys, models, endpoints, and timeouts without rebuilding the HTTP client pool.</p>
+                  </div>
+                </div>
+                <CodeBlock code={dynamicReconfigCode} language="java" title="DynamicReconfiguration.java" />
+              </div>
+            </FadeIn>
+
+            {/* Token Providers */}
+            <FadeIn delay={0.35}>
+              <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800/50 flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-lime-500/10 border border-lime-500/20 flex items-center justify-center">
+                    <KeyRound className="w-5 h-5 text-lime-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Dynamic Token Providers</h3>
+                    <p className="text-sm text-gray-400 mt-0.5">Per-request credentials for rotating tokens, AWS SigV4, and Azure Entra ID / Managed Identity.</p>
+                  </div>
+                </div>
+                <CodeBlock code={tokenProviderCode} language="java" title="TokenProvider.java" />
               </div>
             </FadeIn>
           </div>

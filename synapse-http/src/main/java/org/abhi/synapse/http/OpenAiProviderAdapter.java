@@ -30,6 +30,29 @@ public class OpenAiProviderAdapter implements ProviderAdapter {
         if (responseFormat != null) body.put("response_format", Map.of("type", responseFormat));
         return body;
     }
+
+    @Override public Map<String, Object> buildChatBody(List<ChatMessage> messages, double temperature,
+            int maxTokens, String modelName, boolean streaming, List<ToolDefinition> tools,
+            ResponseFormat responseFormat) {
+        Map<String, Object> body = buildChatBody(messages, temperature, maxTokens, modelName,
+                streaming, tools, responseFormat != null ? responseFormat.getType() : null);
+        if (responseFormat != null && "json_schema".equals(responseFormat.getType())) {
+            try {
+                JsonNode schema = objectMapper.readTree(responseFormat.getSchemaJson());
+                Map<String, Object> schemaConfig = new HashMap<>();
+                schemaConfig.put("name", responseFormat.getName());
+                schemaConfig.put("schema", schema);
+                body.put("response_format", Map.of("type", "json_schema", "json_schema", schemaConfig));
+            } catch (Exception e) {
+                throw new SynapseException("Invalid JSON Schema for structured output", e,
+                        SynapseException.ExceptionType.PARSE_ERROR);
+            }
+        }
+        if (Boolean.TRUE.equals(streaming) && body.containsKey("stream")) {
+            body.put("stream_options", Map.of("include_usage", true));
+        }
+        return body;
+    }
     @Override public SynapseResponse parseResponse(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
@@ -68,6 +91,19 @@ public class OpenAiProviderAdapter implements ProviderAdapter {
     @Override public String extractContentFromStreamChunk(String jsonData) {
         try { return objectMapper.readTree(jsonData).path("choices").path(0).path("delta").path("content").asText(""); }
         catch (Exception e) { return ""; }
+    }
+    @Override public boolean isUsageChunk(String jsonData) {
+        if (jsonData == null) return false;
+        try { return objectMapper.readTree(jsonData).path("usage").isObject(); }
+        catch (Exception e) { return false; }
+    }
+    @Override public long[] extractStreamUsage(String jsonData) {
+        if (jsonData == null) return null;
+        try {
+            JsonNode usage = objectMapper.readTree(jsonData).path("usage");
+            if (!usage.isObject()) return null;
+            return new long[]{usage.path("prompt_tokens").asLong(0), usage.path("completion_tokens").asLong(0)};
+        } catch (Exception e) { return null; }
     }
     @Override public boolean isStreamDone(String line) {
         if (line == null) return true;

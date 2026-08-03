@@ -41,6 +41,7 @@ class SynapseStreamHandler {
         }
 
         StringBuilder accumulatedContent = new StringBuilder();
+        long[] usage = new long[2];
         try {
             response.body().forEach(line -> {
                 if (token != null && token.isCancelled()) {
@@ -48,6 +49,14 @@ class SynapseStreamHandler {
                 }
                 String data = adapter.extractStreamData(line);
                 if (data == null || adapter.isStreamDone(data)) {
+                    return;
+                }
+                if (adapter.isUsageChunk(data)) {
+                    long[] extracted = adapter.extractStreamUsage(data);
+                    if (extracted != null) {
+                        usage[0] = extracted[0];
+                        usage[1] = extracted[1];
+                    }
                     return;
                 }
                 try {
@@ -66,6 +75,8 @@ class SynapseStreamHandler {
             if (accumulatedContent.length() > 0) {
                 SynapseResponse partial = new SynapseResponse();
                 partial.setContent(accumulatedContent.toString());
+                partial.setPromptTokens((int) usage[0]);
+                partial.setCompletionTokens((int) usage[1]);
                 partial.setCorrelationId(java.util.UUID.randomUUID().toString());
                 listener.onComplete(partial);
                 return partial;
@@ -76,6 +87,8 @@ class SynapseStreamHandler {
 
         SynapseResponse fullResponse = new SynapseResponse();
         fullResponse.setContent(accumulatedContent.toString());
+        fullResponse.setPromptTokens((int) usage[0]);
+        fullResponse.setCompletionTokens((int) usage[1]);
         fullResponse.setCorrelationId(java.util.UUID.randomUUID().toString());
         listener.onComplete(fullResponse);
         return fullResponse;
@@ -97,6 +110,9 @@ class SynapseStreamHandler {
                 }
                 String data = adapter.extractStreamData(line);
                 if (data == null || adapter.isStreamDone(data)) {
+                    return;
+                }
+                if (adapter.isUsageChunk(data)) {
                     return;
                 }
                 try {

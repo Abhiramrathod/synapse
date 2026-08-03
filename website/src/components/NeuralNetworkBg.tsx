@@ -21,13 +21,13 @@ interface Connection {
 }
 
 const COLORS = {
-  nodeBlue: '#5c7cfa',
-  nodePurple: '#8b5cf6',
-  nodeGreen: '#00ff88',
-  nodeCyan: '#00d4ff',
-  lineDefault: 'rgba(92, 124, 250, 0.12)',
-  lineActive: 'rgba(0, 255, 136, 0.4)',
-  signal: '#00ff88',
+  nodeBlue: '#e7e5e4',
+  nodePurple: '#a8a29e',
+  nodeGreen: '#f5f5f4',
+  nodeCyan: '#d6d3d1',
+  lineDefault: 'rgba(168, 162, 158, 0.12)',
+  lineActive: 'rgba(245, 245, 244, 0.35)',
+  signal: '#f5f5f4',
 }
 
 const NODE_COLORS = [COLORS.nodeBlue, COLORS.nodePurple, COLORS.nodeGreen, COLORS.nodeCyan]
@@ -149,8 +149,8 @@ export default function NeuralNetworkBg() {
         ctx.moveTo(fromNode.x, fromNode.y)
         ctx.lineTo(toNode.x, toNode.y)
         ctx.strokeStyle = conn.signalActive
-          ? `rgba(0, 255, 136, ${alpha * 2})`
-          : `rgba(92, 124, 250, ${alpha})`
+          ? `rgba(245, 245, 244, ${alpha * 2})`
+          : `rgba(168, 162, 158, ${alpha})`
         ctx.lineWidth = conn.signalActive ? 1.2 : 0.6
         ctx.stroke()
 
@@ -161,9 +161,9 @@ export default function NeuralNetworkBg() {
           const pulseRadius = 2 + Math.sin(time * 0.1) * 1
 
           const gradient = ctx.createRadialGradient(sx, sy, 0, sx, sy, pulseRadius * 3)
-          gradient.addColorStop(0, 'rgba(0, 255, 136, 0.8)')
-          gradient.addColorStop(0.5, 'rgba(0, 212, 255, 0.3)')
-          gradient.addColorStop(1, 'rgba(0, 255, 136, 0)')
+          gradient.addColorStop(0, 'rgba(245, 245, 244, 0.8)')
+          gradient.addColorStop(0.5, 'rgba(214, 211, 209, 0.3)')
+          gradient.addColorStop(1, 'rgba(245, 245, 244, 0)')
 
           ctx.beginPath()
           ctx.arc(sx, sy, pulseRadius * 3, 0, Math.PI * 2)
@@ -215,7 +215,7 @@ export default function NeuralNetworkBg() {
     <canvas
       ref={canvasRef}
       className="fixed inset-0 pointer-events-none"
-      style={{ zIndex: 0, opacity: 0.7 }}
+      style={{ zIndex: 0, opacity: 0.45 }}
     />
   )
 }

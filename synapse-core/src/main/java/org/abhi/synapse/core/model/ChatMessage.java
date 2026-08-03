@@ -1,6 +1,10 @@
 package org.abhi.synapse.core.model;
 
+import org.abhi.synapse.core.PromptTemplate;
+
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Represents a single message in a chat conversation with an LLM.
@@ -226,5 +230,44 @@ public class ChatMessage {
         msg.setToolCallId(toolCallId);
         msg.setName(name);
         return msg;
+    }
+
+    /**
+     * Returns a copy of this message whose content has had {@code {name}}
+     * placeholders substituted with the given variables.
+     *
+     * <p>This method never mutates the receiver; the original message keeps its
+     * original content so the same template can be reused across calls. If the
+     * content contains no placeholders, or no supplied key matches, this message
+     * is returned unchanged.</p>
+     *
+     * @param variables the variable map; keys may use the same {@code {name}} syntax
+     * @return a rendered copy of this message, or {@code this} when nothing changes
+     * @see org.abhi.synapse.core.PromptTemplate#render(String, Map)
+     */
+    public ChatMessage withVariables(Map<String, Object> variables) {
+        if (variables == null || variables.isEmpty() || content == null || !content.contains("{")) {
+            return this;
+        }
+        String rendered = PromptTemplate.render(content, variables);
+        if (rendered.equals(content)) return this;
+        ChatMessage copy = new ChatMessage(role, rendered);
+        copy.setToolCallId(toolCallId);
+        copy.setName(name);
+        copy.setToolCalls(toolCalls);
+        return copy;
+    }
+
+    /**
+     * Returns a copy of this message with the given single variable substituted
+     * into its content, equivalent to
+     * {@link #withVariables(Map) withVariables(Map.of(key, value))}.
+     *
+     * @param key   the variable name to substitute (without braces)
+     * @param value the value to inject; a {@code null} value leaves the placeholder intact
+     * @return a rendered copy of this message, or {@code this} when nothing changes
+     */
+    public ChatMessage withVariable(String key, Object value) {
+        return withVariables(Collections.singletonMap(key, value));
     }
 }

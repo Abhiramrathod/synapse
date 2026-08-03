@@ -51,6 +51,16 @@
 				<artifactId>synapse-spring-boot-starter</artifactId>
 				<version>${project.version}</version>
 			</dependency>
+			<dependency>
+				<groupId>org.abhi</groupId>
+				<artifactId>synapse-test</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.abhi</groupId>
+				<artifactId>synapse-cache</artifactId>
+				<version>${project.version}</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 

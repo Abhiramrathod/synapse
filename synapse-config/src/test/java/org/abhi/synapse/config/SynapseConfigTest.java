@@ -1,7 +1,15 @@
 package org.abhi.synapse.config;
 
+import org.abhi.synapse.core.ProviderAdapter;
 import org.abhi.synapse.core.exception.SynapseException;
+import org.abhi.synapse.core.model.ChatMessage;
+import org.abhi.synapse.core.model.Model;
+import org.abhi.synapse.core.model.SynapseResponse;
+import org.abhi.synapse.core.model.ToolDefinition;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -137,5 +145,64 @@ class SynapseConfigTest {
         assertThat(config.getMaxConcurrentRequests()).isEqualTo(64);
         assertThat(config.getCircuitBreakerFailureThreshold()).isEqualTo(5);
         assertThat(config.getCircuitBreakerOpenDuration()).isEqualTo(java.time.Duration.ofSeconds(30));
+    }
+
+    @Test
+    void providerAdapterCanBeInjected() {
+        ProviderAdapter adapter = minimalAdapter("custom");
+        SynapseConfig config = SynapseConfig.builder()
+                .baseUrl("https://api.example.com")
+                .endpoint("/v1/chat/completions")
+                .apiKey("sk-test")
+                .modelName("gpt-4")
+                .provider(adapter)
+                .build();
+
+        assertThat(config.getProviderAdapter()).isSameAs(adapter);
+    }
+
+    @Test
+    void validateSkipsProviderNameWhenAdapterInjected() {
+        SynapseConfig config = SynapseConfig.builder()
+                .baseUrl("https://api.example.com")
+                .endpoint("/v1/chat/completions")
+                .apiKey("sk-test")
+                .modelName("gpt-4")
+                .provider("")
+                .provider(minimalAdapter("custom"))
+                .build();
+
+        config.validate();
+    }
+
+    @Test
+    void validateRequiresProviderNameWithoutAdapter() {
+        SynapseConfig config = SynapseConfig.builder()
+                .baseUrl("https://api.example.com")
+                .endpoint("/v1/chat/completions")
+                .apiKey("sk-test")
+                .modelName("gpt-4")
+                .provider("")
+                .build();
+
+        assertThatThrownBy(config::validate)
+                .isInstanceOf(SynapseException.class)
+                .hasMessageContaining("provider");
+    }
+
+    private static ProviderAdapter minimalAdapter(String name) {
+        return new ProviderAdapter() {
+            @Override public String providerName() { return name; }
+            @Override public String buildUrl(String baseUrl, String endpoint) { return baseUrl + endpoint; }
+            @Override public Map<String, String> buildAuthHeaders(String apiKey) { return Map.of(); }
+            @Override public Map<String, Object> buildChatBody(List<ChatMessage> messages, double temperature,
+                    int maxTokens, String modelName, boolean streaming, List<ToolDefinition> tools, String responseFormat) {
+                return Map.of();
+            }
+            @Override public SynapseResponse parseResponse(String responseBody) { return new SynapseResponse(); }
+            @Override public List<Model> parseModels(String responseBody) { return List.of(); }
+            @Override public String extractContentFromStreamChunk(String jsonData) { return ""; }
+            @Override public boolean isStreamDone(String line) { return true; }
+        };
     }
 }

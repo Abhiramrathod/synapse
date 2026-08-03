@@ -36,6 +36,14 @@
 			<artifactId>synapse-metrics</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>org.abhi</groupId>
+			<artifactId>synapse-test</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.abhi</groupId>
+			<artifactId>synapse-cache</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
 		</dependency>

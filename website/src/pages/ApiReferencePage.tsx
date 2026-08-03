@@ -6,7 +6,7 @@ import PageMeta from '../components/PageMeta'
 import CodeBlock from '../components/CodeBlock'
 import Badge from '../components/Badge'
 import { apiMethods, exceptionTypes } from '../data/content'
-import { quickStartCode, errorHandlingCode, fullConfigCode, interceptorCode, retryPolicyCode } from '../data/codeExamples'
+import { quickStartCode, errorHandlingCode, fullConfigCode, interceptorCode, retryPolicyCode, streamFlowCode, responseCacheCode, fallbackHubCode, loadBalancingHubCode, dynamicReconfigCode } from '../data/codeExamples'
 
 interface NavItem {
   id: string
@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { id: 'isynapsehub', label: 'ISynapseHub' },
   { id: 'synapsehub', label: 'SynapseHub' },
   { id: 'synapseconfig', label: 'SynapseConfig' },
+  { id: 'tokenprovider', label: 'TokenProvider' },
   { id: 'provideradapter', label: 'ProviderAdapter' },
   { id: 'chatmessage', label: 'ChatMessage' },
   { id: 'model', label: 'Model' },
@@ -25,14 +26,21 @@ const navItems: NavItem[] = [
   { id: 'interceptors', label: 'Interceptors' },
   { id: 'synapseretrypolicy', label: 'SynapseRetryPolicy' },
   { id: 'synapsemetricslistener', label: 'SynapseMetricsListener' },
+  { id: 'streamflow', label: 'StreamFlow' },
+  { id: 'responsecache', label: 'ResponseCache' },
+  { id: 'fallbackhub', label: 'FallbackHub' },
+  { id: 'loadbalancinghub', label: 'LoadBalancingHub' },
+  { id: 'dynamicreconfig', label: 'Dynamic Reconfig' },
 ]
 
 const configBuilderMethods = [
   { name: 'baseUrl', type: 'String', description: 'Base URL of the LLM API provider' },
   { name: 'endpoint', type: 'String', description: 'API endpoint path' },
   { name: 'apiKey', type: 'String', description: 'Authentication API key (redacted in toString)' },
+  { name: 'tokenProvider', type: 'TokenProvider', description: 'Dynamic credential supplier invoked per request; makes apiKey optional' },
   { name: 'modelName', type: 'String', description: 'Default model identifier' },
   { name: 'provider', type: 'String', description: 'Provider name matched against a registered ProviderAdapter (default: "openai")' },
+  { name: 'provider(adapter)', type: 'ProviderAdapter', description: 'Inject a ProviderAdapter directly, bypassing ServiceLoader resolution' },
   { name: 'temperature', type: 'double', description: 'Sampling temperature (0.0 - 2.0)' },
   { name: 'maxTokens', type: 'int', description: 'Maximum tokens in response' },
   { name: 'connectTimeout', type: 'Duration', description: 'TCP connect timeout' },
@@ -45,6 +53,7 @@ const configBuilderMethods = [
   { name: 'maxConcurrentRequests', type: 'int', description: 'Semaphore permits for concurrency' },
   { name: 'circuitBreakerFailureThreshold', type: 'int', description: 'Failures before circuit opens' },
   { name: 'circuitBreakerOpenDuration', type: 'Duration', description: 'How long circuit stays open' },
+  { name: 'cache', type: 'ResponseCache', description: 'Attach a response cache (Caffeine / Redis); alias responseCache(...)' },
   { name: 'enableLogging', type: 'boolean', description: 'Enable request/response logging' },
   { name: 'requestInterceptor', type: 'SynapseRequestInterceptor', description: 'Request interceptor' },
   { name: 'responseInterceptor', type: 'SynapseResponseInterceptor', description: 'Response interceptor' },
@@ -426,6 +435,64 @@ for (Model model : models) {
                 </div>
 
                 <CodeBlock code={fullConfigCode} title="Full Configuration" />
+              </section>
+            </FadeIn>
+
+            {/* TokenProvider */}
+            <FadeIn>
+              <section id="tokenprovider">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-lime-500/10 border border-lime-500/20">
+                    <Code2 className="w-5 h-5 text-lime-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">TokenProvider</h2>
+                  <Badge variant="blue">interface</Badge>
+                </div>
+                <p className="text-gray-400 mb-6">
+                  Supplies the authentication credential for outbound requests <em>at call time</em>,
+                  so tokens can rotate without restarting the application. This is the extension point
+                  for AWS Bedrock SigV4 signers, Azure OpenAI Entra ID / Managed Identity, and short-lived
+                  access tokens. When set, <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">apiKey</code> becomes optional.
+                </p>
+
+                <div className="glass-card overflow-hidden mb-6">
+                  <div className="p-4 border-b border-gray-800/50">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      Factory Methods
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-gray-800/50">
+                    {[
+                      { method: 'bearer(String token)', type: 'TokenProvider', description: 'Static bearer token provider' },
+                      { method: 'fromSupplier(Supplier<String>)', type: 'TokenProvider', description: 'Adapts a plain supplier; invoked on every request' },
+                      { method: 'getToken()', type: 'String', description: 'Return the current raw credential token (no scheme prefix)' },
+                      { method: 'buildAuthorizationHeader()', type: 'String', description: 'Default "Bearer " + getToken(); override for schemes like AWS SigV4' },
+                    ].map((item) => (
+                      <div key={item.method} className="px-4 py-3 flex items-center gap-4">
+                        <span className="font-mono text-synapse-400 text-sm min-w-[280px]">{item.method}</span>
+                        <span className="font-mono text-gray-500 text-xs min-w-[90px]">{item.type}</span>
+                        <span className="text-gray-400 text-sm flex-1">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <CodeBlock code={`// Rotating token — supplier invoked on every request
+AtomicReference<String> token = new AtomicReference<>("current");
+
+SynapseConfig config = SynapseConfig.builder()
+        .baseUrl("https://api.openai.com")
+        .endpoint("/v1/chat/completions")
+        .tokenProvider(TokenProvider.fromSupplier(token::get))
+        .modelName("gpt-4")
+        .build();
+
+try (SynapseHub hub = new SynapseHub(config)) {
+    hub.sendPrompt("Hi", null);   // Authorization: Bearer current
+    token.set("rotated");
+    hub.sendPrompt("Hi", null);   // Authorization: Bearer rotated
+}`} title="TokenProvider Usage" />
               </section>
             </FadeIn>
 
@@ -816,6 +883,234 @@ for (Model model : models) {
                 </div>
 
                 <CodeBlock code={metricsListenerInterfaceCode} title="Metrics Listener Interface" />
+              </section>
+            </FadeIn>
+
+            {/* StreamFlow */}
+            <FadeIn>
+              <section id="streamflow">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-teal-500/10 border border-teal-500/20">
+                    <Code2 className="w-5 h-5 text-teal-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">StreamFlow</h2>
+                  <Badge variant="blue">class</Badge>
+                </div>
+                <p className="text-gray-400 mb-6">
+                  Fluent utilities for consuming streaming LLM tokens without writing{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">Flow.Subscriber</code> boilerplate.
+                  Wraps a <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">Flow.Publisher</code> from
+                  {' '}<code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">streamPromptAsFlow</code> /{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">streamChatAsFlow</code>.
+                  Streams are lazy — nothing is consumed until a terminal operation subscribes.
+                </p>
+
+                <div className="glass-card overflow-hidden mb-6">
+                  <div className="p-4 border-b border-gray-800/50">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      Operators
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-gray-800/50">
+                    {[
+                      { method: 'of(Publisher<T>)', type: 'StreamFlow<T>', description: 'Wrap a raw reactive publisher' },
+                      { method: 'ofPrompt(hub, prompt)', type: 'StreamFlow<String>', description: 'Stream a single prompt from any ISynapseHub' },
+                      { method: 'ofChat(hub, messages)', type: 'StreamFlow<String>', description: 'Stream a multi-turn chat from any ISynapseHub' },
+                      { method: 'filter(Predicate<T>)', type: 'StreamFlow<T>', description: 'Pass through only matching elements' },
+                      { method: 'map(Function<T, R>)', type: 'StreamFlow<R>', description: 'Transform each element' },
+                      { method: 'onErrorReturn(T fallback)', type: 'StreamFlow<T>', description: 'Suppress upstream errors, emit fallback, complete normally' },
+                      { method: 'forEach(Consumer<T>)', type: 'CompletableFuture<Void>', description: 'Consume every element; future completes when the stream ends' },
+                      { method: 'toList()', type: 'CompletableFuture<List<T>>', description: 'Collect all elements' },
+                      { method: 'join() / join(delim)', type: 'CompletableFuture<String>', description: 'Concatenate stringified elements' },
+                      { method: 'count()', type: 'CompletableFuture<Long>', description: 'Count elements' },
+                      { method: 'blockFirst() / blockLast()', type: 'T', description: 'Block and unwrap SynapseException for direct handling' },
+                    ].map((item) => (
+                      <div key={item.method} className="px-4 py-3 flex items-center gap-4">
+                        <span className="font-mono text-synapse-400 text-sm min-w-[260px]">{item.method}</span>
+                        <span className="font-mono text-gray-500 text-xs min-w-[110px]">{item.type}</span>
+                        <span className="text-gray-400 text-sm flex-1">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <CodeBlock code={streamFlowCode} title="StreamFlow Usage" />
+              </section>
+            </FadeIn>
+
+            {/* ResponseCache */}
+            <FadeIn>
+              <section id="responsecache">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                    <Code2 className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">ResponseCache</h2>
+                  <Badge variant="blue">interface</Badge>
+                </div>
+                <p className="text-gray-400 mb-6">
+                  Pluggable cache for LLM responses, keyed by request. Repeated{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">sendPrompt</code>{' '}
+                  calls (key: <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">&quot;model|prompt&quot;</code>) are
+                  served from the cache instead of the provider. Built-in adapters live in{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">synapse-cache</code>.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="glass-card p-6">
+                    <h4 className="text-sm font-semibold text-white mb-3">CaffeineResponseCache (in-memory)</h4>
+                    <ul className="space-y-2 text-sm text-gray-400">
+                      <li className="flex items-start gap-2">
+                        <ArrowRight className="w-3 h-3 text-cyan-400 mt-1.5 flex-shrink-0" />
+                        <span className="font-mono text-cyan-400">builder().maximumSize(n).expireAfterWrite(Duration).build()</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <ArrowRight className="w-3 h-3 text-cyan-400 mt-1.5 flex-shrink-0" />
+                        <span className="font-mono text-cyan-400">ofMaximumSize(n)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <ArrowRight className="w-3 h-3 text-cyan-400 mt-1.5 flex-shrink-0" />
+                        <span className="font-mono text-cyan-400">expiringAfterWrite(Duration)</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="glass-card p-6">
+                    <h4 className="text-sm font-semibold text-white mb-3">RedisResponseCache (distributed)</h4>
+                    <ul className="space-y-2 text-sm text-gray-400">
+                      <li className="flex items-start gap-2">
+                        <ArrowRight className="w-3 h-3 text-cyan-400 mt-1.5 flex-shrink-0" />
+                        <span className="font-mono text-cyan-400">viaServiceLoader()</span> — driver discovered via SPI
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <ArrowRight className="w-3 h-3 text-cyan-400 mt-1.5 flex-shrink-0" />
+                        <span className="font-mono text-cyan-400">new RedisResponseCache(redisClient)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <ArrowRight className="w-3 h-3 text-cyan-400 mt-1.5 flex-shrink-0" />
+                        <span><code className="text-cyan-400 font-mono">clear()</code> unsupported — Redis cannot enumerate keys</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="glass-card overflow-hidden mb-6">
+                  <div className="p-4 border-b border-gray-800/50">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      Interface Methods
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-gray-800/50">
+                    {[
+                      { method: 'get(String key)', type: 'Optional<SynapseResponse>', description: 'Cache hit or empty on a miss' },
+                      { method: 'put(String key, SynapseResponse)', type: 'void', description: 'Store a response under the key' },
+                      { method: 'evict(String key)', type: 'void', description: 'Remove a single entry' },
+                      { method: 'clear()', type: 'void', description: 'Clear all entries (unsupported on Redis)' },
+                      { method: 'close()', type: 'void', description: 'Release resources (AutoCloseable, default no-op)' },
+                    ].map((item) => (
+                      <div key={item.method} className="px-4 py-3 flex items-center gap-4">
+                        <span className="font-mono text-synapse-400 text-sm min-w-[280px]">{item.method}</span>
+                        <span className="font-mono text-gray-500 text-xs min-w-[110px]">{item.type}</span>
+                        <span className="text-gray-400 text-sm flex-1">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <CodeBlock code={responseCacheCode} title="Response Cache Usage" />
+              </section>
+            </FadeIn>
+
+            {/* FallbackSynapseHub */}
+            <FadeIn>
+              <section id="fallbackhub">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <Code2 className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">FallbackSynapseHub</h2>
+                  <Badge variant="green">class</Badge>
+                </div>
+                <p className="text-gray-400 mb-6">
+                  An <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">ISynapseHub</code>{' '}
+                  decorator that routes around failed hubs. Calls are attempted against hubs in the order supplied;
+                  when one throws a <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">SynapseException</code>,
+                  the next hub is tried. Covers sync, async, typed, model-list, and streaming submission. A stream that
+                  has already delivered chunks cannot be replayed, so mid-stream failures propagate.
+                </p>
+                <CodeBlock code={fallbackHubCode} title="FallbackSynapseHub Usage" />
+              </section>
+            </FadeIn>
+
+            {/* LoadBalancingSynapseHub */}
+            <FadeIn>
+              <section id="loadbalancinghub">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                    <Code2 className="w-5 h-5 text-indigo-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">LoadBalancingSynapseHub</h2>
+                  <Badge variant="green">class</Badge>
+                </div>
+                <p className="text-gray-400 mb-6">
+                  An <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">ISynapseHub</code>{' '}
+                  decorator that spreads load across hubs with thread-safe round-robin routing. Unlike{' '}
+                  <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">FallbackSynapseHub</code>,
+                  failing calls are never retried on another hub — the error propagates so you can detect it.
+                  Combine both for distribution and resilience.
+                </p>
+                <CodeBlock code={loadBalancingHubCode} title="LoadBalancingSynapseHub Usage" />
+              </section>
+            </FadeIn>
+
+            {/* Dynamic Reconfiguration */}
+            <FadeIn>
+              <section id="dynamicreconfig">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <Code2 className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">Dynamic Reconfiguration</h2>
+                  <Badge variant="purple">SynapseHub</Badge>
+                </div>
+                <p className="text-gray-400 mb-6">
+                  Rotate keys, endpoints, timeouts, and defaults at runtime without rebuilding the HTTP client pool.
+                  Settings are volatile and read per request; the <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">HttpClient</code>,
+                  async executor, circuit breaker, rate limiter, interceptors, and metrics are all preserved. Invalid
+                  arguments throw <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">IllegalArgumentException</code>;
+                  updates on a closed hub throw <code className="text-synapse-400 bg-synapse-500/10 px-1.5 py-0.5 rounded">IllegalStateException</code>.
+                </p>
+
+                <div className="glass-card overflow-hidden mb-6">
+                  <div className="p-4 border-b border-gray-800/50">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      Methods (chainable — return the same SynapseHub)
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-gray-800/50">
+                    {[
+                      { method: 'updateApiKey(String)', type: 'SynapseHub', description: 'Rotate the API key for subsequent requests' },
+                      { method: 'updateDefaultModel(String)', type: 'SynapseHub', description: 'Change the default model' },
+                      { method: 'updateBaseUrl(String)', type: 'SynapseHub', description: 'Point subsequent requests at a new base URL' },
+                      { method: 'updateEndpoint(String)', type: 'SynapseHub', description: 'Change the provider endpoint path' },
+                      { method: 'updateRequestTimeout(Duration)', type: 'SynapseHub', description: 'Update the per-request timeout' },
+                      { method: 'updateTemperature(double)', type: 'SynapseHub', description: 'Update the default sampling temperature' },
+                      { method: 'updateMaxTokens(int)', type: 'SynapseHub', description: 'Update the default max tokens' },
+                      { method: 'updateTokenProvider(TokenProvider)', type: 'SynapseHub', description: 'Switch to a dynamic credential source' },
+                      { method: 'reconfigure(SynapseConfig)', type: 'SynapseHub', description: 'Apply dynamic fields from a whole new config (re-validates)' },
+                    ].map((item) => (
+                      <div key={item.method} className="px-4 py-3 flex items-center gap-4">
+                        <span className="font-mono text-synapse-400 text-sm min-w-[290px]">{item.method}</span>
+                        <span className="font-mono text-gray-500 text-xs min-w-[90px]">{item.type}</span>
+                        <span className="text-gray-400 text-sm flex-1">{item.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <CodeBlock code={dynamicReconfigCode} title="Dynamic Reconfiguration" />
               </section>
             </FadeIn>
           </div>

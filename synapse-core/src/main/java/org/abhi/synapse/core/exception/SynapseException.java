@@ -76,6 +76,9 @@ public class SynapseException extends RuntimeException {
         /** The exception was caused by exhausting all retry attempts. */
         RETRY_EXHAUSTED,
 
+        /** The exception was caused by a declarative tool registration or invocation failure. */
+        TOOL_ERROR,
+
         /** The exception was caused by the circuit breaker being open. */
         CIRCUIT_BREAKER_OPEN
     }

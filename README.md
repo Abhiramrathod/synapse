@@ -16,6 +16,11 @@ A production-ready, provider-agnostic Java client for any LLM API. One unified i
 | Thread-unsafe metrics | `LongAdder` + `CopyOnWriteArrayList` — safe under concurrent load |
 | Secrets in logs | `toString()` masks API keys and Authorization headers |
 | Timeout misconfiguration | Split timeouts: connect, read, overall deadline, stream idle |
+| Static credentials only | `TokenProvider` SPI — per-request token acquisition for rotating keys, AWS SigV4, Azure Entra ID / Managed Identity |
+| Reconfig needs a restart | `SynapseHub.updateApiKey(...)`, `updateBaseUrl(...)`, `reconfigure(...)` etc. — rotate keys, endpoints, and defaults live without tearing down the HTTP client pool |
+| Repeated queries burn credits | `ResponseCache` — pluggable Caffeine (in-memory) and Redis (SPI) caches, keyed by model + prompt, with TTL |
+| Single provider = single point of failure | `FallbackSynapseHub` + `LoadBalancingSynapseHub` — route around failures or spread load across hubs |
+| Streaming boilerplate | `StreamFlow` — filter/map/join/forEach over token streams with zero `Flow.Subscriber` plumbing |
 
 ## Architecture
 
@@ -91,12 +96,16 @@ graph TD
     P --> F["synapse-all<br/>POM-only aggregator (single dependency)"]
     P --> G["synapse-spring-boot-starter<br/>Auto-config + YAML properties"]
     P --> H["synapse-bom<br/>BOM for version alignment"]
+    P --> I["synapse-cache<br/>Caffeine + Redis response cache adapters"]
+    P --> J["synapse-test<br/>MockSynapseHub in-memory test double"]
 
     A --> B
     A --> C
     B --> D
     C --> D
     D --> E
+    A --> I
+    A --> J
 
     style P fill:#1e3a8a,stroke:#4c6ef5,color:#fff
     style A fill:#3b1764,stroke:#8b5cf6,color:#fff
@@ -107,16 +116,20 @@ graph TD
     style F fill:#1f2937,stroke:#6b7280,color:#fff
     style G fill:#4a1942,stroke:#ec4899,color:#fff
     style H fill:#1f2937,stroke:#6b7280,color:#fff
+    style I fill:#083344,stroke:#22d3ee,color:#fff
+    style J fill:#1e1b4b,stroke:#818cf8,color:#fff
 ```
 
 | Module | Key Classes | Purpose |
 |--------|-------------|---------|
-| `synapse-core` | `ISynapseHub`, `ChatMessage`, `SynapseResponse`, `SynapseException`, `ToolCall`, `RequestOptions`, `StreamListener`, `StreamHandle`, `CancellationToken` | Public API surface |
+| `synapse-core` | `ISynapseHub`, `ChatMessage`, `SynapseResponse`, `SynapseException`, `ToolCall`, `RequestOptions`, `StreamListener`, `StreamHandle`, `CancellationToken`, `StreamFlow`, `TokenProvider`, `FallbackSynapseHub`, `LoadBalancingSynapseHub`, `ResponseCache`, `NoOpResponseCache` | Public API surface |
 | `synapse-interceptors` | `SynapseRequestInterceptor`, `SynapseResponseInterceptor`, `SynapseRetryPolicy`, `SynapseMetricsListener` | Extension contracts |
-| `synapse-config` | `SynapseConfig` | Immutable config with split timeouts, circuit breaker, rate limit settings |
-| `synapse-http` | `SynapseHub`, `ProviderAdapter`/`OpenAiProviderAdapter`, `CircuitBreaker`, `ConcurrencyLimiter`, `SynapseStreamHandler`, `SynapseRetryHandler` | Full implementation |
+| `synapse-config` | `SynapseConfig` | Immutable config with split timeouts, circuit breaker, rate limit, caching, and token provider settings |
+| `synapse-http` | `SynapseHub`, `ProviderAdapter`/`OpenAiProviderAdapter`, `CircuitBreaker`, `ConcurrencyLimiter`, `SynapseStreamHandler`, `SynapseRetryHandler`, `HubSettings` | Full implementation + dynamic reconfiguration |
 | `synapse-metrics` | `SynapseMetrics`, `SynapseMetricsCollector`, `SynapseMicrometerMetricsAdapter`, `SynapseOpenTelemetryExporter` | Metrics collection + export |
 | `synapse-spring-boot-starter` | `SynapseAutoConfiguration`, `SynapseProperties` | Spring Boot integration |
+| `synapse-cache` | `CaffeineResponseCache`, `RedisResponseCache`, `RedisClient`, `RedisClientProvider` | Pluggable response caches |
+| `synapse-test` | `MockSynapseHub` | In-memory hub for unit tests |
 
 ## Requirements
 
@@ -163,6 +176,17 @@ graph TD
     <version>TAG</version>
     <type>pom</type>
     <scope>import</scope>
+</dependency>
+```
+
+**Caching adapters** — only needed if you use individual modules instead of
+`synapse-all`:
+
+```xml
+<dependency>
+    <groupId>com.github.Abhiramrathod</groupId>
+    <artifactId>synapse-cache</artifactId>
+    <version>TAG</version>
 </dependency>
 ```
 
@@ -377,6 +401,210 @@ sequenceDiagram
     Note over App: handle.getFuture().join() completes
 ```
 
+## Response Caching
+
+Repeating static queries (system prompts, repeated classification tasks) burn API
+credits unnecessarily. Attach a `ResponseCache` to the hub and identical prompts are
+served from the cache instead of the provider.
+
+```java
+import org.abhi.synapse.core.cache.ResponseCache;
+import org.abhi.synapse.cache.CaffeineResponseCache;
+import org.abhi.synapse.cache.RedisResponseCache;
+
+// In-memory (Caffeine) — bounded by size and/or TTL
+ResponseCache caffeine = CaffeineResponseCache.builder()
+        .maximumSize(10_000)
+        .expireAfterWrite(Duration.ofMinutes(5))
+        .build();
+
+// Distributed (Redis) — the driver is supplied via SPI
+ResponseCache redis = RedisResponseCache.viaServiceLoader();
+
+SynapseConfig config = SynapseConfig.builder()
+        .baseUrl("https://api.openai.com")
+        .endpoint("/v1/chat/completions")
+        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .modelName("gpt-4")
+        .cache(caffeine)                     // alias: .responseCache(...)
+        .build();
+```
+
+How it works:
+
+- `sendPrompt` is cache-aware. The cache key is `"<model>|<prompt>"` — a hit
+  returns the stored `SynapseResponse` directly; a miss calls the provider and
+  stores the response. `sendChat` is never cached.
+- Caches are keyed and thread-safe. Evict a single entry with `cache.evict(key)`;
+  `clear()` works for Caffeine, and `RedisResponseCache.clear()` throws
+  `UnsupportedOperationException` because Redis cannot enumerate keys.
+- Implement the `ResponseCache` interface (`get` / `put` / `evict` / `clear`,
+  plus `AutoCloseable`) to plug in any backend. `NoOpResponseCache` is the
+  default when nothing is configured.
+
+The Redis adapter carries **no Redis dependency**. Implement the minimal byte-oriented
+contract and register it via `ServiceLoader`:
+
+```java
+public class LettuceRedisClientProvider implements RedisClientProvider {
+    @Override public String name() { return "lettuce"; }
+    @Override public RedisClient create() {
+        // get(byte[]), set(byte[], byte[], Duration), delete(byte[]), close()
+        return new LettuceRedisClient();
+    }
+}
+```
+
+```text
+src/main/resources/META-INF/services/org.abhi.synapse.cache.RedisClientProvider
+```
+
+## Fallback & Load Balancing
+
+`ISynapseHub` decorators that compose multiple hubs. Wrap `SynapseHub` instances
+for different providers, accounts, regions, or API keys.
+
+```java
+import org.abhi.synapse.core.FallbackSynapseHub;
+import org.abhi.synapse.core.LoadBalancingSynapseHub;
+
+ISynapseHub primary = new SynapseHub(openAiConfig);
+ISynapseHub backup  = new SynapseHub(anthropicConfig);
+
+// Try hubs in order; route around any hub that throws a SynapseException
+ISynapseHub resilient = new FallbackSynapseHub(primary, backup);
+
+// Spread calls across hubs with thread-safe round-robin routing
+ISynapseHub scaled = new LoadBalancingSynapseHub(hubA, hubB);
+```
+
+Semantics:
+
+- `FallbackSynapseHub` covers synchronous, typed (`sendPrompt` with a class),
+  asynchronous, model-list, and streaming *submission* failures. A stream that
+  has already started delivering chunks cannot be replayed on another hub, so
+  mid-stream failures propagate to the caller.
+- `LoadBalancingSynapseHub` never retries on another hub — a failing hub
+  propagates its error so you can detect it. Combine both for distribution and
+  resilience: wrap a load balancer with a fallback.
+- Both expose the full `ISynapseHub` surface, so your calling code is unchanged.
+  `close()` closes every wrapped hub.
+
+## Fluent Stream Processing (StreamFlow)
+
+`StreamFlow` wraps the `Flow.Publisher` returned by `streamPromptAsFlow` /
+`streamChatAsFlow` with a tiny reactive toolkit — no `Flow.Subscriber`
+boilerplate. Streams are lazy: nothing is consumed until a terminal operation
+subscribes.
+
+```java
+import org.abhi.synapse.core.StreamFlow;
+
+// Stream a prompt, filter blanks, trim, and print each chunk as it arrives
+StreamFlow.ofPrompt(hub, "Tell me a story")
+        .filter(chunk -> !chunk.isBlank())
+        .map(String::trim)
+        .forEach(chunk -> System.out.print(chunk));   // CompletableFuture<Void>
+
+// Collect the entire stream into one string
+String fullText = StreamFlow.ofPrompt(hub, "Explain qubits").join().join();
+
+// Block and unwrap SynapseExceptions for direct handling
+String lastChunk = StreamFlow.ofChat(hub, messages).blockLast();
+
+// Suppress upstream errors with a fallback element
+List<String> chunks = StreamFlow.of(publisher)
+        .onErrorReturn("(error)")
+        .toList().join();
+
+// Count elements
+long count = StreamFlow.of(publisher).count().join();
+```
+
+Factories: `of(Publisher)`, `ofPrompt(hub, prompt)`, `ofChat(hub, messages)`.
+Operators: `filter`, `map`, `onErrorReturn`. Terminal operations:
+`forEach` (async), `toList`, `join` / `join(delimiter)`, `count`, `blockFirst`,
+`blockLast` (blocking, unwrap `SynapseException`), `subscribe`.
+
+## Dynamic Reconfiguration
+
+Rotate keys, endpoints, timeouts, and defaults at runtime **without destroying
+the active HTTP client pool**. Settings are volatile and read per request; the
+`HttpClient`, async executor, circuit breaker, rate limiter, interceptors, and
+metrics are all preserved. Only subsequent requests see the new values.
+
+```java
+SynapseHub hub = new SynapseHub(config);
+
+// Individual updates — each returns the same hub, so they chain
+hub.updateApiKey("sk-rotated")
+   .updateDefaultModel("gpt-4o")
+   .updateBaseUrl("https://backup.example.com")
+   .updateEndpoint("/v2/chat/completions")
+   .updateRequestTimeout(Duration.ofSeconds(90))
+   .updateTemperature(0.2)
+   .updateMaxTokens(2048)
+   .updateTokenProvider(TokenProvider.fromSupplier(() -> acquireToken()));
+
+// Or apply a whole new config in one shot (re-validates first)
+hub.reconfigure(newConfig);
+```
+
+Available updates: `updateApiKey`, `updateDefaultModel`, `updateBaseUrl`,
+`updateEndpoint`, `updateRequestTimeout`, `updateTemperature`, `updateMaxTokens`,
+`updateTokenProvider`, and `reconfigure(SynapseConfig)`. Invalid arguments throw
+`IllegalArgumentException`; calling any update on a closed hub throws
+`IllegalStateException`.
+
+## Dynamic Token Providers
+
+By default the hub sends `Authorization: Bearer <apiKey>`. A `TokenProvider`
+replaces this with a credential acquired **at call time**, so tokens can rotate
+without restarting the application. This is the extension point for enterprise
+identity flows: AWS Bedrock SigV4 signers, Azure OpenAI Entra ID / Managed
+Identity, and short-lived access tokens.
+
+```java
+import org.abhi.synapse.core.TokenProvider;
+
+// Static bearer token
+SynapseConfig config = SynapseConfig.builder()
+        .baseUrl("https://api.openai.com")
+        .endpoint("/v1/chat/completions")
+        .tokenProvider(TokenProvider.bearer("static-token"))
+        .modelName("gpt-4")
+        .build();
+
+// Rotating token — the supplier is invoked on every request
+AtomicReference<String> token = new AtomicReference<>("current");
+SynapseConfig rotating = SynapseConfig.builder()
+        .baseUrl("https://api.openai.com")
+        .endpoint("/v1/chat/completions")
+        .tokenProvider(TokenProvider.fromSupplier(token::get))
+        .modelName("gpt-4")
+        .build();
+```
+
+`buildAuthorizationHeader()` returns `"Bearer " + getToken()` by default and is
+overridden by providers that need a different scheme (for example AWS SigV4,
+which produces a full `AWS4-HMAC-SHA256 Credential=...` header):
+
+```java
+public class SigV4Provider implements TokenProvider {
+    @Override public String getToken() {
+        return signCanonicalRequest();              // raw credential material
+    }
+
+    @Override public String buildAuthorizationHeader() {
+        return "AWS4-HMAC-SHA256 " + getToken();    // full header value
+    }
+}
+```
+
+When a token provider is configured it takes precedence over `apiKey`, and
+`apiKey` becomes optional. Rotate the provider itself at runtime with
+`hub.updateTokenProvider(...)`.
+
 ## Error Handling
 
 ```java
@@ -438,7 +666,7 @@ SynapseConfig config = SynapseConfig.builder()
         // Required
         .baseUrl("https://api.openai.com")
         .endpoint("/v1/chat/completions")
-        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .apiKey(System.getenv("OPENAI_API_KEY"))   // or .tokenProvider(...) instead
         .modelName("gpt-4")
         .provider("openai")          // matches a registered ProviderAdapter
 
@@ -471,10 +699,21 @@ SynapseConfig config = SynapseConfig.builder()
         .retryPolicy(new CustomRetryPolicy())
         .metricsListener(new MetricsListener())
 
+        // Caching (synapse-cache module)
+        .cache(CaffeineResponseCache.builder()
+                .maximumSize(10_000)
+                .expireAfterWrite(Duration.ofMinutes(5))
+                .build())
+
         // Misc
         .enableLogging(true)
         .build();
 ```
+
+> **Credentials**: at least one of `apiKey(...)` or `tokenProvider(...)` is
+> required — validation fails if neither is present. If both are set, the
+> token provider takes precedence. See
+> [Dynamic Token Providers](#dynamic-token-providers) below.
 
 ## Provider SPI — Bring Your Own Provider
 
@@ -717,6 +956,26 @@ synapse:
   circuit-breaker-failure-threshold: 5
   circuit-breaker-open-duration: 30s
   enable-logging: true
+```
+
+> The starter binds the static `synapse.*` properties. Caching and token
+> providers are wired in Java, so override the auto-configured `SynapseConfig`
+> bean (the starter backs off when you define your own):
+
+```java
+@Bean
+SynapseConfig synapseConfig() {
+    return SynapseConfig.builder()
+            .baseUrl("https://api.openai.com")
+            .endpoint("/v1/chat/completions")
+            .apiKey(System.getenv("OPENAI_API_KEY"))
+            .modelName("gpt-4o")
+            .cache(CaffeineResponseCache.builder()
+                    .maximumSize(10_000)
+                    .expireAfterWrite(Duration.ofMinutes(5))
+                    .build())
+            .build();
+}
 ```
 
 ### Inject ISynapseHub

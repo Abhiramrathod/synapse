@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#111827"/>
-      <stop offset="100%" stop-color="#1f2937"/>
+      <stop offset="0%" stop-color="#1c1917"/>
+      <stop offset="100%" stop-color="#292524"/>
     </linearGradient>
     <linearGradient id="green" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00e676"/>
-      <stop offset="100%" stop-color="#69f0ae"/>
+      <stop offset="0%" stop-color="#d6d3d1"/>
+      <stop offset="100%" stop-color="#f5f5f4"/>
     </linearGradient>
   </defs>
 
@@ -14,33 +14,33 @@
   <rect width="128" height="128" rx="28" fill="url(#bg)"/>
 
   <!-- Connections -->
-  <line x1="28" y1="36" x2="64" y2="24" stroke="#00e676" stroke-width="1.5" opacity="0.3"/>
-  <line x1="28" y1="36" x2="64" y2="64" stroke="#00e676" stroke-width="1.5" opacity="0.3"/>
-  <line x1="28" y1="64" x2="64" y2="24" stroke="#00e676" stroke-width="1.5" opacity="0.25"/>
-  <line x1="28" y1="64" x2="64" y2="64" stroke="#00e676" stroke-width="1.5" opacity="0.4"/>
-  <line x1="28" y1="64" x2="64" y2="104" stroke="#00e676" stroke-width="1.5" opacity="0.25"/>
-  <line x1="28" y1="92" x2="64" y2="64" stroke="#00e676" stroke-width="1.5" opacity="0.3"/>
-  <line x1="28" y1="92" x2="64" y2="104" stroke="#00e676" stroke-width="1.5" opacity="0.3"/>
-  <line x1="64" y1="24" x2="100" y2="44" stroke="#69f0ae" stroke-width="1.5" opacity="0.35"/>
-  <line x1="64" y1="24" x2="100" y2="84" stroke="#69f0ae" stroke-width="1.5" opacity="0.2"/>
-  <line x1="64" y1="64" x2="100" y2="44" stroke="#69f0ae" stroke-width="1.8" opacity="0.5"/>
-  <line x1="64" y1="64" x2="100" y2="84" stroke="#69f0ae" stroke-width="1.8" opacity="0.5"/>
-  <line x1="64" y1="104" x2="100" y2="44" stroke="#69f0ae" stroke-width="1.5" opacity="0.2"/>
-  <line x1="64" y1="104" x2="100" y2="84" stroke="#69f0ae" stroke-width="1.5" opacity="0.35"/>
+  <line x1="28" y1="36" x2="64" y2="24" stroke="#d6d3d1" stroke-width="1.5" opacity="0.3"/>
+  <line x1="28" y1="36" x2="64" y2="64" stroke="#d6d3d1" stroke-width="1.5" opacity="0.3"/>
+  <line x1="28" y1="64" x2="64" y2="24" stroke="#d6d3d1" stroke-width="1.5" opacity="0.25"/>
+  <line x1="28" y1="64" x2="64" y2="64" stroke="#d6d3d1" stroke-width="1.5" opacity="0.4"/>
+  <line x1="28" y1="64" x2="64" y2="104" stroke="#d6d3d1" stroke-width="1.5" opacity="0.25"/>
+  <line x1="28" y1="92" x2="64" y2="64" stroke="#d6d3d1" stroke-width="1.5" opacity="0.3"/>
+  <line x1="28" y1="92" x2="64" y2="104" stroke="#d6d3d1" stroke-width="1.5" opacity="0.3"/>
+  <line x1="64" y1="24" x2="100" y2="44" stroke="#a8a29e" stroke-width="1.5" opacity="0.35"/>
+  <line x1="64" y1="24" x2="100" y2="84" stroke="#a8a29e" stroke-width="1.5" opacity="0.2"/>
+  <line x1="64" y1="64" x2="100" y2="44" stroke="#a8a29e" stroke-width="1.8" opacity="0.5"/>
+  <line x1="64" y1="64" x2="100" y2="84" stroke="#a8a29e" stroke-width="1.8" opacity="0.5"/>
+  <line x1="64" y1="104" x2="100" y2="44" stroke="#a8a29e" stroke-width="1.5" opacity="0.2"/>
+  <line x1="64" y1="104" x2="100" y2="84" stroke="#a8a29e" stroke-width="1.5" opacity="0.35"/>
 
   <!-- Input layer -->
-  <circle cx="28" cy="36" r="6" fill="#00e676"/>
-  <circle cx="28" cy="64" r="7" fill="#00e676"/>
-  <circle cx="28" cy="92" r="6" fill="#00e676"/>
+  <circle cx="28" cy="36" r="6" fill="#d6d3d1"/>
+  <circle cx="28" cy="64" r="7" fill="#d6d3d1"/>
+  <circle cx="28" cy="92" r="6" fill="#d6d3d1"/>
 
   <!-- Hidden layer -->
-  <circle cx="64" cy="24" r="5.5" fill="#2e7d32"/>
-  <circle cx="64" cy="64" r="8" fill="#1b5e20"/>
-  <circle cx="64" cy="104" r="5.5" fill="#2e7d32"/>
+  <circle cx="64" cy="24" r="5.5" fill="#78716c"/>
+  <circle cx="64" cy="64" r="8" fill="#57534e"/>
+  <circle cx="64" cy="104" r="5.5" fill="#78716c"/>
 
   <!-- Output layer -->
-  <circle cx="100" cy="44" r="6.5" fill="#b9f6ca"/>
-  <circle cx="100" cy="84" r="6.5" fill="#b9f6ca"/>
+  <circle cx="100" cy="44" r="6.5" fill="#e7e5e4"/>
+  <circle cx="100" cy="84" r="6.5" fill="#e7e5e4"/>
 
   <!-- Center highlight -->
   <circle cx="64" cy="64" r="3.5" fill="#ffffff" opacity="0.85"/>

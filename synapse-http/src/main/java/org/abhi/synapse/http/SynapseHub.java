@@ -6,10 +6,14 @@ import org.abhi.synapse.core.ProviderAdapter;
 import org.abhi.synapse.core.RequestOptions;
 import org.abhi.synapse.core.StreamHandle;
 import org.abhi.synapse.core.StreamListener;
+import org.abhi.synapse.core.TokenProvider;
+import org.abhi.synapse.core.cache.ResponseCache;
 import org.abhi.synapse.core.exception.SynapseException;
 import org.abhi.synapse.core.model.ChatMessage;
+import org.abhi.synapse.core.model.ToolCall;
 import org.abhi.synapse.core.CancellationToken;
 import org.abhi.synapse.core.model.Model;
+import org.abhi.synapse.core.model.ResponseFormat;
 import org.abhi.synapse.core.model.SynapseRequestContext;
 import org.abhi.synapse.core.model.SynapseResponse;
 import org.abhi.synapse.core.model.SynapseResponseContext;
@@ -18,13 +22,17 @@ import org.abhi.synapse.interceptors.SynapseResponseInterceptor;
 import org.abhi.synapse.metrics.SynapseMetrics;
 import org.abhi.synapse.metrics.SynapseMetricsCollector;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.Proxy;
+import java.net.ProxySelector;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -42,6 +50,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(SynapseHub.class);
 
     private final SynapseConfig config;
+    private final HubSettings settings;
     private final ProviderAdapter adapter;
     private final SynapseRequestBuilder requestBuilder;
     private final SynapseResponseParser responseParser;
@@ -54,6 +63,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private final ExecutorService asyncExecutor;
     private final CircuitBreaker circuitBreaker;
     private final ConcurrencyLimiter concurrencyLimiter;
+    private final RateLimiter rateLimiter;
     private volatile boolean closed = false;
 
     public SynapseHub(SynapseConfig config) {
@@ -62,13 +72,29 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
 
     public SynapseHub(SynapseConfig config, ObjectMapper objectMapper) {
         this.config = config;
-        this.objectMapper = objectMapper;
+        this.settings = new HubSettings(config);
+        this.objectMapper = SynapseJson.configure(objectMapper);
         this.metrics = new SynapseMetrics();
         this.adapter = resolveAdapter(config);
-        this.requestBuilder = new SynapseRequestBuilder(config, objectMapper, adapter);
+        this.requestBuilder = new SynapseRequestBuilder(settings, objectMapper, adapter);
         this.responseParser = new SynapseResponseParser(adapter);
-        this.httpClient = new SynapseHttpClient(
-                HttpClient.newBuilder().connectTimeout(config.getTimeout()).build());
+        HttpClient.Builder httpBuilder = HttpClient.newBuilder().connectTimeout(config.getTimeout());
+        if (config.getSslContext() != null) {
+            httpBuilder.sslContext(config.getSslContext());
+        }
+        if (config.getProxy() != null) {
+            Proxy proxy = config.getProxy();
+            httpBuilder.proxy(new ProxySelector() {
+                @Override public java.util.List<Proxy> select(java.net.URI uri) {
+                    return java.util.List.of(proxy);
+                }
+                @Override public void connectFailed(java.net.URI uri, java.net.SocketAddress sa,
+                                                    java.io.IOException ioe) {
+                    log.debug("[Synapse] Proxy connect failed for {}: {}", uri, ioe.getMessage());
+                }
+            });
+        }
+        this.httpClient = new SynapseHttpClient(httpBuilder.build());
         this.streamHandler = new SynapseStreamHandler(httpClient, adapter);
         this.retryHandler = new SynapseRetryHandler(config);
         this.metricsCollector = new SynapseMetricsCollector(metrics, config);
@@ -76,13 +102,16 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
                 config.getCircuitBreakerFailureThreshold(),
                 config.getCircuitBreakerOpenDuration());
         this.concurrencyLimiter = new ConcurrencyLimiter(config.getMaxConcurrentRequests());
+        this.rateLimiter = config.getMaxRequestsPerMinute() > 0
+                ? new RateLimiter(config.getMaxRequestsPerMinute(), java.time.Duration.ofMinutes(1))
+                : null;
         this.asyncExecutor = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "synapse-async-" + System.nanoTime());
             t.setDaemon(true);
             return t;
         });
         validateConfig();
-        log.info("[Synapse] Hub initialized for model: {}", config.getModelName());
+        log.info("[Synapse] Hub initialized for model: {}", settings.modelName);
     }
 
     private void validateConfig() {
@@ -94,6 +123,10 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     }
 
     private static ProviderAdapter resolveAdapter(SynapseConfig config) {
+        ProviderAdapter explicit = config.getProviderAdapter();
+        if (explicit != null) {
+            return explicit;
+        }
         String provider = config.getProvider();
         List<ProviderAdapter> adapters = new ArrayList<>();
         ServiceLoader.load(ProviderAdapter.class).forEach(adapters::add);
@@ -112,16 +145,97 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     @Override
     public SynapseResponse sendPrompt(String prompt, RequestOptions options) throws SynapseException {
         checkNotClosed();
+        ResponseCache cache = config.getResponseCache();
+        if (cache != null) {
+            String key = cacheKey(prompt, options);
+            java.util.Optional<SynapseResponse> hit = cache.get(key);
+            if (hit.isPresent()) {
+                log.debug("[Synapse] Cache hit for prompt");
+                return hit.get();
+            }
+            SynapseResponse response = sendChat(List.of(ChatMessage.user(prompt)), options);
+            cache.put(key, response);
+            return response;
+        }
         return sendChat(List.of(ChatMessage.user(prompt)), options);
+    }
+
+    private String cacheKey(String prompt, RequestOptions options) {
+        return resolveModel(options) + "|" + prompt;
     }
 
     @Override
     public SynapseResponse sendChat(List<ChatMessage> messages, RequestOptions options) throws SynapseException {
         checkNotClosed();
+        return sendChatWithToolLoop(messages, options, 0);
+    }
+
+    private SynapseResponse sendChatWithToolLoop(List<ChatMessage> messages, RequestOptions options, int iteration)
+            throws SynapseException {
         String modelName = resolveModel(options);
-        Map<String, Object> body = requestBuilder.buildMessagesBody(messages, false, modelName);
+        List<ChatMessage> resolved = resolveMessages(messages, options);
+        ToolRegistry registry = buildToolRegistry(options);
+        Map<String, Object> body = requestBuilder.buildMessagesBody(resolved, false, modelName,
+                registry != null ? registry.definitions() : options != null ? options.getTools() : null,
+                options != null ? options.getResponseFormat() : null);
         String jsonBody = requestBuilder.serializeBody(body);
-        return executeWithRetry(jsonBody, false);
+        SynapseResponse response = executeWithRetry(jsonBody, false);
+
+        if (registry != null && iteration < config.getMaxToolIterations()
+                && response.getToolCalls() != null && !response.getToolCalls().isEmpty()) {
+            List<ChatMessage> continued = new ArrayList<>(resolved);
+            continued.add(toAssistantMessage(response));
+            for (ToolCall call : response.getToolCalls()) {
+                String result = registry.invoke(call.getFunction(), call.getArguments());
+                continued.add(ChatMessage.tool(call.getId(), call.getFunction(), result));
+            }
+            return sendChatWithToolLoop(continued, options, iteration + 1);
+        }
+        return response;
+    }
+
+    private ToolRegistry buildToolRegistry(RequestOptions options) {
+        if (options == null || options.getToolInstances() == null || options.getToolInstances().isEmpty()) {
+            return null;
+        }
+        return new ToolRegistry(objectMapper, options.getToolInstances());
+    }
+
+    @Override
+    public <T> T sendPrompt(String prompt, Class<T> returnType, RequestOptions options) throws SynapseException {
+        checkNotClosed();
+        JsonNode schema = JsonSchemaGenerator.generateObjectSchema(returnType, objectMapper);
+        try {
+            String schemaJson = objectMapper.writeValueAsString(schema);
+            RequestOptions effective = options != null ? options : RequestOptions.defaults();
+
+            RequestOptions withSchema = new RequestOptions();
+            withSchema.setModelName(effective.getModelName())
+                    .setVariables(effective.getVariables())
+                    .setToolInstances(effective.getToolInstances());
+
+            SynapseResponse response;
+            if (adapter.supportsJsonSchemaStructuredOutput()) {
+                withSchema.setResponseFormat(ResponseFormat.jsonSchema(returnType.getSimpleName(), schemaJson));
+                response = sendPrompt(prompt, withSchema);
+            } else {
+                withSchema.setResponseFormat(null);
+                String injected = prompt + "\n\nRespond with a single JSON object matching this JSON Schema:\n"
+                        + schemaJson;
+                response = sendPrompt(injected, withSchema);
+            }
+            return objectMapper.readValue(response.getContent(), returnType);
+        } catch (SynapseException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new SynapseException("Structured output failed: " + e.getMessage(), e,
+                    SynapseException.ExceptionType.PARSE_ERROR);
+        }
+    }
+
+    private static ChatMessage toAssistantMessage(SynapseResponse response) {        ChatMessage message = new ChatMessage("assistant", response.getContent());
+        message.setToolCalls(response.getToolCalls());
+        return message;
     }
 
     @Override
@@ -174,6 +288,9 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
                     e, SynapseException.ExceptionType.CONFIG_ERROR);
         }
         try {
+            if (rateLimiter != null) {
+                rateLimiter.acquire();
+            }
             CancellationToken token = new CancellationToken();
             CompletableFuture<SynapseResponse> future = new CompletableFuture<>();
             String correlationId = java.util.UUID.randomUUID().toString();
@@ -189,14 +306,14 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
                     long startTime = System.currentTimeMillis();
 
                     SynapseResponse fullResponse = streamHandler.handleWithStreamListener(
-                            request, listener, token, config.isEnableLogging());
+                            request, listener, token, settings.enableLogging);
                     fullResponse.setCorrelationId(correlationId);
                     circuitBreaker.recordSuccess();
                     metricsCollector.recordSuccess(startTime);
                     future.complete(fullResponse);
 
                     SynapseResponseContext resCtx = new SynapseResponseContext(200, "", Map.of(),
-                            System.currentTimeMillis() - startTime, config.getModelName(), 0);
+                            System.currentTimeMillis() - startTime, settings.modelName, 0);
                     notify(config.getResponseInterceptor(), SynapseResponseInterceptor::afterResponse, resCtx);
                 } catch (SynapseException e) {
                     circuitBreaker.recordFailure();
@@ -260,7 +377,17 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private String resolveModel(RequestOptions options) {
         return options != null && options.getModelName() != null
                 ? options.getModelName()
-                : config.getModelName();
+                : settings.modelName;
+    }
+
+    private List<ChatMessage> resolveMessages(List<ChatMessage> messages, RequestOptions options) {
+        Map<String, Object> variables = options != null ? options.getVariables() : null;
+        if (variables == null || variables.isEmpty()) return messages;
+        List<ChatMessage> rendered = new ArrayList<>(messages.size());
+        for (ChatMessage message : messages) {
+            rendered.add(message.withVariables(variables));
+        }
+        return rendered;
     }
 
     private SynapseResponse executeWithRetry(String requestBody, boolean streaming) throws SynapseException {
@@ -277,6 +404,9 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
                     e, SynapseException.ExceptionType.CONFIG_ERROR);
         }
         try {
+            if (rateLimiter != null) {
+                rateLimiter.acquire();
+            }
             String url = requestBuilder.buildUrl();
             SynapseRequestContext reqCtx = buildRequestContext(url, requestBody, streaming);
 
@@ -318,7 +448,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             try {
                 String url = requestBuilder.buildUrl();
                 HttpRequest request = requestBuilder.buildPostRequest(url, requestBody);
-                streamHandler.handleAsFlow(request, publisher, token, config.isEnableLogging());
+                streamHandler.handleAsFlow(request, publisher, token, settings.enableLogging);
             } catch (Exception e) {
                 publisher.fail(e);
             }
@@ -337,12 +467,12 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     private SynapseRequestContext buildRequestContext(String url, String body, boolean streaming) {
         Map<String, String> headers = new HashMap<>();
         headers.put("Content-Type", "application/json");
-        return new SynapseRequestContext(url, body, headers, streaming, config.getModelName());
+        return new SynapseRequestContext(url, body, headers, streaming, settings.modelName);
     }
 
     private SynapseResponseContext buildResponseContext(HttpResponse<String> response, long startTime) {
         return new SynapseResponseContext(response.statusCode(),
-                response.body(), Map.of(), System.currentTimeMillis() - startTime, config.getModelName(), 0);
+                response.body(), Map.of(), System.currentTimeMillis() - startTime, settings.modelName, 0);
     }
 
     private void notifyError(SynapseRequestContext reqCtx, SynapseResponseContext resCtx, SynapseException ex) {
@@ -371,6 +501,169 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
 
     public SynapseMetrics getMetrics() {
         return metrics;
+    }
+
+    /**
+     * Rotates the API key for subsequent requests.
+     *
+     * <p>The shared {@link java.net.http.HttpClient} connection pool and async
+     * executor are left untouched, so rotation is cheap and in-flight requests
+     * keep the old credential.</p>
+     *
+     * @param apiKey the new API key; must not be blank
+     * @return this hub, for chaining
+     * @throws IllegalArgumentException if the key is blank or the hub is closed
+     */
+    public SynapseHub updateApiKey(String apiKey) {
+        requireOpen();
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalArgumentException("apiKey must not be blank");
+        }
+        settings.apiKey = apiKey;
+        log.info("[Synapse] API key rotated");
+        return this;
+    }
+
+    /**
+     * Switches the default model for requests that do not specify one.
+     *
+     * @param modelName the new default model; must not be blank
+     * @return this hub, for chaining
+     * @throws IllegalArgumentException if the model is blank or the hub is closed
+     */
+    public SynapseHub updateDefaultModel(String modelName) {
+        requireOpen();
+        if (modelName == null || modelName.isBlank()) {
+            throw new IllegalArgumentException("modelName must not be blank");
+        }
+        settings.modelName = modelName;
+        log.info("[Synapse] Default model updated to {}", modelName);
+        return this;
+    }
+
+    /**
+     * Changes the provider base URL for subsequent requests.
+     *
+     * @param baseUrl the new base URL; must not be blank
+     * @return this hub, for chaining
+     * @throws IllegalArgumentException if the URL is blank or the hub is closed
+     */
+    public SynapseHub updateBaseUrl(String baseUrl) {
+        requireOpen();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new IllegalArgumentException("baseUrl must not be blank");
+        }
+        settings.baseUrl = baseUrl;
+        log.info("[Synapse] Base URL updated");
+        return this;
+    }
+
+    /**
+     * Changes the provider endpoint for subsequent requests.
+     *
+     * @param endpoint the new endpoint; must not be blank
+     * @return this hub, for chaining
+     * @throws IllegalArgumentException if the endpoint is blank or the hub is closed
+     */
+    public SynapseHub updateEndpoint(String endpoint) {
+        requireOpen();
+        if (endpoint == null || endpoint.isBlank()) {
+            throw new IllegalArgumentException("endpoint must not be blank");
+        }
+        settings.endpoint = endpoint;
+        return this;
+    }
+
+    /**
+     * Updates the per-request timeout applied to outgoing HTTP requests.
+     *
+     * @param requestTimeout the new timeout; must not be {@code null}
+     * @return this hub, for chaining
+     * @throws IllegalArgumentException if the timeout is {@code null} or the hub is closed
+     */
+    public SynapseHub updateRequestTimeout(Duration requestTimeout) {
+        requireOpen();
+        if (requestTimeout == null) {
+            throw new IllegalArgumentException("requestTimeout must not be null");
+        }
+        settings.requestTimeout = requestTimeout;
+        log.info("[Synapse] Request timeout updated to {}", requestTimeout);
+        return this;
+    }
+
+    /**
+     * Updates the default temperature for subsequent requests.
+     *
+     * @param temperature the new temperature
+     * @return this hub, for chaining
+     */
+    public SynapseHub updateTemperature(double temperature) {
+        requireOpen();
+        settings.temperature = temperature;
+        return this;
+    }
+
+    /**
+     * Updates the default max tokens for subsequent requests.
+     *
+     * @param maxTokens the new max tokens; must be positive
+     * @return this hub, for chaining
+     * @throws IllegalArgumentException if maxTokens is not positive or the hub is closed
+     */
+    public SynapseHub updateMaxTokens(int maxTokens) {
+        requireOpen();
+        if (maxTokens <= 0) {
+            throw new IllegalArgumentException("maxTokens must be positive");
+        }
+        settings.maxTokens = maxTokens;
+        return this;
+    }
+
+    /**
+     * Switches authentication to a dynamic {@link TokenProvider}.
+     *
+     * @param tokenProvider the new token source; must not be {@code null}
+     * @return this hub, for chaining
+     * @throws IllegalArgumentException if the provider is {@code null} or the hub is closed
+     */
+    public SynapseHub updateTokenProvider(TokenProvider tokenProvider) {
+        requireOpen();
+        if (tokenProvider == null) {
+            throw new IllegalArgumentException("tokenProvider must not be null");
+        }
+        settings.tokenProvider = tokenProvider;
+        log.info("[Synapse] Token provider updated");
+        return this;
+    }
+
+    /**
+     * Reconfigures the runtime-tunable settings from a new {@link SynapseConfig}.
+     *
+     * <p>Only the dynamic fields are applied (API key, token provider, base URL,
+     * endpoint, default model, request timeout, temperature, max tokens, logging).
+     * The HTTP client pool, async executor, circuit breaker, rate limiter,
+     * interceptors, and metrics are preserved.</p>
+     *
+     * @param config the config whose dynamic fields should take effect
+     * @return this hub, for chaining
+     * @throws IllegalArgumentException if the config is invalid or the hub is closed
+     */
+    public SynapseHub reconfigure(SynapseConfig config) {
+        requireOpen();
+        try {
+            config.validate();
+        } catch (SynapseException e) {
+            throw new IllegalArgumentException("Invalid SynapseConfig: " + e.getMessage());
+        }
+        settings.updateFrom(config);
+        log.info("[Synapse] Hub reconfigured");
+        return this;
+    }
+
+    private void requireOpen() {
+        if (closed) {
+            throw new IllegalStateException("SynapseHub is closed");
+        }
     }
 
     @Override

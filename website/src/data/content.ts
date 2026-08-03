@@ -1,6 +1,7 @@
 import {
   Zap, Shield, Gauge, Puzzle, RefreshCw, BarChart3,
-  Blocks, Code2, Workflow, Terminal, Globe, Layers
+  Blocks, Code2, Workflow, Terminal, Globe, Layers,
+  Route, Shuffle, Database, SlidersHorizontal, KeyRound
 } from 'lucide-react'
 
 export const features = [
@@ -68,6 +69,46 @@ export const features = [
     bgColor: 'bg-red-500/10',
     borderColor: 'border-red-500/20',
   },
+  {
+    icon: Route,
+    title: 'Fluent Stream Processing',
+    description: 'StreamFlow wraps reactive streams with filter, map, onErrorReturn, join, count, and blockLast — zero Flow.Subscriber boilerplate.',
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/10',
+    borderColor: 'border-teal-500/20',
+  },
+  {
+    icon: Shuffle,
+    title: 'Fallback & Load Balancing',
+    description: 'FallbackSynapseHub routes around failed providers; LoadBalancingSynapseHub round-robins across hubs. Both are full ISynapseHub decorators.',
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-500/10',
+    borderColor: 'border-amber-500/20',
+  },
+  {
+    icon: Database,
+    title: 'Response Caching',
+    description: 'Pluggable ResponseCache — Caffeine in-memory and Redis (SPI) with TTL. Repeated prompts are served from cache, not the provider.',
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/10',
+    borderColor: 'border-cyan-500/20',
+  },
+  {
+    icon: SlidersHorizontal,
+    title: 'Dynamic Reconfiguration',
+    description: 'Rotate API keys, models, endpoints, and timeouts live via update*/reconfigure without rebuilding the HTTP client pool.',
+    color: 'text-indigo-400',
+    bgColor: 'bg-indigo-500/10',
+    borderColor: 'border-indigo-500/20',
+  },
+  {
+    icon: KeyRound,
+    title: 'Dynamic Token Providers',
+    description: 'TokenProvider SPI invoked per request — rotating tokens, AWS SigV4, Azure Entra ID / Managed Identity with no restarts.',
+    color: 'text-lime-400',
+    bgColor: 'bg-lime-500/10',
+    borderColor: 'border-lime-500/20',
+  },
 ]
 
 export const modules = [
@@ -76,7 +117,7 @@ export const modules = [
     description: 'Core interfaces, models, and exceptions',
     icon: Code2,
     color: 'from-synapse-500 to-synapse-700',
-    items: ['ISynapseHub', 'ProviderAdapter', 'ChatMessage', 'SynapseResponse', 'SynapseException', 'Model', 'ToolCall', 'ToolDefinition', 'RequestOptions', 'StreamListener', 'StreamHandle', 'CancellationToken'],
+    items: ['ISynapseHub', 'ProviderAdapter', 'ChatMessage', 'SynapseResponse', 'SynapseException', 'Model', 'ToolCall', 'ToolDefinition', 'RequestOptions', 'StreamListener', 'StreamHandle', 'CancellationToken', 'StreamFlow', 'TokenProvider', 'FallbackSynapseHub', 'LoadBalancingSynapseHub', 'ResponseCache', 'NoOpResponseCache'],
   },
   {
     name: 'synapse-interceptors',
@@ -112,6 +153,20 @@ export const modules = [
     icon: Puzzle,
     color: 'from-pink-500 to-pink-700',
     items: ['AutoConfiguration', 'Properties Binding', 'Conditional Beans', 'All Config Fields'],
+  },
+  {
+    name: 'synapse-cache',
+    description: 'Pluggable response caches',
+    icon: Database,
+    color: 'from-cyan-500 to-cyan-700',
+    items: ['CaffeineResponseCache', 'RedisResponseCache', 'RedisClient', 'RedisClientProvider', 'ServiceLoader SPI'],
+  },
+  {
+    name: 'synapse-test',
+    description: 'In-memory hub for unit tests',
+    icon: Terminal,
+    color: 'from-indigo-500 to-indigo-700',
+    items: ['MockSynapseHub', 'Stub Responses', 'Streaming Stubs', 'Call Recording', 'Verification'],
   },
 ]
 
@@ -208,7 +263,11 @@ export const proofStats = [
   { value: '3', label: 'circuit breaker states', detail: 'CLOSED → OPEN → HALF_OPEN with configurable failure threshold (default 5) and open duration (default 30s).' },
   { value: '4', label: 'split timeouts', detail: 'connect (10s), read (30s), request deadline (60s), and stream idle (120s) — tuned independently.' },
   { value: '64', label: 'default concurrent requests', detail: 'Semaphore-based concurrency limiter prevents thundering-herd 429s under load.' },
+  { value: '10', label: 'focused Maven modules', detail: 'core, interceptors, config, http, metrics, spring-boot-starter, all, bom, cache, and test — pick only what you need.' },
   { value: '9', label: 'typed exceptions', detail: 'CONFIG, NETWORK, TIMEOUT, RATE_LIMIT, SERVER, PARSE, STREAMING, RETRY_EXHAUSTED, CIRCUIT_BREAKER_OPEN — each with a retryable flag.' },
+  { value: '2', label: 'built-in response caches', detail: 'Caffeine in-memory and Redis via SPI — attach with a one-line builder call; sendPrompt hits never reach the provider.' },
+  { value: '9', label: 'runtime-tunable hub settings', detail: 'updateApiKey, updateDefaultModel, updateBaseUrl, updateEndpoint, updateRequestTimeout, updateTemperature, updateMaxTokens, updateTokenProvider, reconfigure — no HTTP client rebuild.' },
+  { value: '2', label: 'hub decorators', detail: 'FallbackSynapseHub routes around failed providers; LoadBalancingSynapseHub round-robins across hubs. Both are full ISynapseHub implementations.' },
 ]
 
 export const comparisonRows = [
@@ -261,5 +320,25 @@ export const comparisonRows = [
     feature: 'Extensibility',
     synapse: 'Interceptors for request/response lifecycle, pluggable retry policy, custom metrics listeners.',
     typical: 'Fork the vendor SDK or write your own wrapper from scratch.',
+  },
+  {
+    feature: 'Response caching',
+    synapse: 'Pluggable ResponseCache — Caffeine in-memory and Redis (SPI) with TTL. Repeated sendPrompt calls are served from cache, never the provider.',
+    typical: 'No caching — identical prompts pay for identical completions on every call.',
+  },
+  {
+    feature: 'Runtime reconfiguration',
+    synapse: 'Rotate API keys, models, endpoints, and timeouts live via update*/reconfigure without rebuilding the HTTP client or its connection pool.',
+    typical: 'Rebuild and restart the whole client (losing pooled connections) for any config change.',
+  },
+  {
+    feature: 'Credential rotation',
+    synapse: 'TokenProvider SPI invoked per request — rotating tokens, AWS SigV4, Azure Entra ID / Managed Identity with no redeploys.',
+    typical: 'Static keys baked in at startup; rotation means a restart or a redeploy.',
+  },
+  {
+    feature: 'Multi-hub resilience',
+    synapse: 'FallbackSynapseHub and LoadBalancingSynapseHub compose multiple providers, accounts, or regions behind the same ISynapseHub API.',
+    typical: 'A single provider instance — any outage, quota cap, or regional blip takes the app down.',
   },
 ]

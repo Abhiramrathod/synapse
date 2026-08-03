@@ -57,8 +57,8 @@ function Arrow() {
         <path d="M12 0 L12 14 M6 10 L12 16 L18 10" stroke="url(#arrowGrad)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         <defs>
           <linearGradient id="arrowGrad" x1="12" y1="0" x2="12" y2="16">
-            <stop offset="0%" stopColor="#5c7cfa" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#00ff88" stopOpacity="0.8" />
+            <stop offset="0%" stopColor="#a8a29e" stopOpacity="0.6" />
+            <stop offset="100%" stopColor="#e7e5e4" stopOpacity="0.8" />
           </linearGradient>
         </defs>
       </svg>

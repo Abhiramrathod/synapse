@@ -62,6 +62,26 @@ public interface ISynapseHub {
     SynapseResponse sendPrompt(String prompt, RequestOptions options) throws SynapseException;
 
     /**
+     * Sends a prompt and parses the response into a typed object.
+     *
+     * <p>The JSON Schema for {@code returnType} is derived from the type and used
+     * to steer the model towards structured output. Providers with native JSON
+     * Schema support receive a {@code response_format}; others fall back to
+     * schema-in-prompt injection. The model's reply is deserialized via Jackson.</p>
+     *
+     * @param prompt     the user's prompt text
+     * @param returnType the target type to deserialize the response into
+     * @param options    per-request overrides ({@code null} for config defaults)
+     * @param <T>        the target type
+     * @return the parsed typed response
+     * @throws SynapseException if the request or deserialization fails
+     */
+    default <T> T sendPrompt(String prompt, Class<T> returnType, RequestOptions options) throws SynapseException {
+        throw new SynapseException("Structured output is not supported by this ISynapseHub implementation",
+                SynapseException.ExceptionType.CONFIG_ERROR);
+    }
+
+    /**
      * Sends a multi-turn chat conversation synchronously.
      *
      * @param messages the conversation history

@@ -4,6 +4,7 @@ import org.abhi.synapse.core.model.ResponseFormat;
 import org.abhi.synapse.core.model.ToolDefinition;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 public class RequestOptions {
     private String modelName;
@@ -14,7 +15,9 @@ public class RequestOptions {
     private Duration requestTimeout;
     private Duration streamIdleTimeout;
     private List<ToolDefinition> tools;
+    private List<Object> toolInstances;
     private ResponseFormat responseFormat;
+    private Map<String, Object> variables;
 
     public RequestOptions() {}
     public String getModelName() { return modelName; }
@@ -33,7 +36,14 @@ public class RequestOptions {
     public RequestOptions setStreamIdleTimeout(Duration st) { this.streamIdleTimeout = st; return this; }
     public List<ToolDefinition> getTools() { return tools; }
     public RequestOptions setTools(List<ToolDefinition> tools) { this.tools = tools; return this; }
+    public List<Object> getToolInstances() { return toolInstances; }
+    public RequestOptions setToolInstances(List<Object> toolInstances) { this.toolInstances = toolInstances; return this; }
+    public boolean hasTools() {
+        return (tools != null && !tools.isEmpty()) || (toolInstances != null && !toolInstances.isEmpty());
+    }
     public ResponseFormat getResponseFormat() { return responseFormat; }
     public RequestOptions setResponseFormat(ResponseFormat rf) { this.responseFormat = rf; return this; }
+    public Map<String, Object> getVariables() { return variables; }
+    public RequestOptions setVariables(Map<String, Object> variables) { this.variables = variables; return this; }
     public static RequestOptions defaults() { return new RequestOptions(); }
 }

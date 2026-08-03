@@ -2,6 +2,7 @@ package org.abhi.synapse.core;
 
 import org.abhi.synapse.core.model.ChatMessage;
 import org.abhi.synapse.core.model.Model;
+import org.abhi.synapse.core.model.ResponseFormat;
 import org.abhi.synapse.core.model.SynapseResponse;
 import org.abhi.synapse.core.model.ToolDefinition;
 import java.util.List;
@@ -36,12 +37,64 @@ public interface ProviderAdapter {
                                        List<ToolDefinition> tools, String responseFormat);
     default Map<String, Object> buildChatBody(List<ChatMessage> messages, double temperature,
                                                int maxTokens, String modelName, boolean streaming) {
-        return buildChatBody(messages, temperature, maxTokens, modelName, streaming, null, null);
+        return buildChatBody(messages, temperature, maxTokens, modelName, streaming,
+                (List<ToolDefinition>) null, (String) null);
+    }
+
+    /**
+     * Builds the chat request body with a structured {@link ResponseFormat}.
+     *
+     * <p>The default implementation forwards only the format type to
+     * {@link #buildChatBody(List, double, int, String, boolean, List, String)}.
+     * Providers that support native JSON Schema output (such as OpenAI) should
+     * override this method to emit the full schema payload.</p>
+     */
+    default Map<String, Object> buildChatBody(List<ChatMessage> messages, double temperature,
+                                               int maxTokens, String modelName, boolean streaming,
+                                               List<ToolDefinition> tools, ResponseFormat responseFormat) {
+        return buildChatBody(messages, temperature, maxTokens, modelName, streaming, tools,
+                (String) (responseFormat != null ? responseFormat.getType() : null));
+    }
+
+    /**
+     * Whether this provider supports native {@code json_schema} structured output.
+     *
+     * <p>When {@code false}, structured output falls back to injecting the schema
+     * into the prompt text.</p>
+     */
+    default boolean supportsJsonSchemaStructuredOutput() {
+        return true;
     }
     SynapseResponse parseResponse(String responseBody);
     List<Model> parseModels(String responseBody);
     String extractContentFromStreamChunk(String jsonData);
     boolean isStreamDone(String line);
+
+    /**
+     * Whether a single SSE payload is a stream usage chunk rather than content.
+     *
+     * <p>Providers that emit token usage as a dedicated SSE payload during
+     * streaming (such as OpenAI, which sends an empty-{@code choices} chunk
+     * carrying a {@code usage} object just before {@code [DONE]}) should
+     * override this method. The default implementation reports {@code false}.</p>
+     *
+     * @param jsonData the raw JSON payload of the stream chunk; may be {@code null}
+     * @return {@code true} if the chunk carries only usage statistics
+     */
+    default boolean isUsageChunk(String jsonData) {
+        return false;
+    }
+
+    /**
+     * Extracts token usage from a stream usage chunk.
+     *
+     * @param jsonData the raw JSON payload of the stream chunk; may be {@code null}
+     * @return a two-element array {@code {promptTokens, completionTokens}}, or
+     *         {@code null} if the chunk carries no usage statistics
+     */
+    default long[] extractStreamUsage(String jsonData) {
+        return null;
+    }
 
     /**
      * Extracts the raw JSON payload from a single SSE line.

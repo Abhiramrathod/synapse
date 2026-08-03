@@ -156,6 +156,11 @@ export const fullConfigCode = `SynapseConfig config = SynapseConfig.builder()
         .responseInterceptor(new MetricsInterceptor())
         .retryPolicy(new CustomRetryPolicy())
         .metricsListener(new MicrometerListener())
+        // synapse-cache module
+        .cache(CaffeineResponseCache.builder()
+                .maximumSize(10_000)
+                .expireAfterWrite(Duration.ofMinutes(5))
+                .build())
         .build();`
 
 export const errorHandlingCode = `try {
@@ -378,3 +383,130 @@ synapse:
   api-key: \${ANTHROPIC_API_KEY}
   model-name: claude-3-5-sonnet-20240620
   provider: anthropic`
+
+export const responseCacheCode = `// synapse-cache module
+ResponseCache cache = CaffeineResponseCache.builder()
+        .maximumSize(10_000)
+        .expireAfterWrite(Duration.ofMinutes(5))
+        .build();
+
+SynapseConfig config = SynapseConfig.builder()
+        .baseUrl("https://api.openai.com")
+        .endpoint("/v1/chat/completions")
+        .apiKey(System.getenv("OPENAI_API_KEY"))
+        .modelName("gpt-4")
+        .cache(cache)                // alias: .responseCache(...)
+        .build();
+
+try (SynapseHub hub = new SynapseHub(config)) {
+    // First call hits the provider and stores the result...
+    SynapseResponse first = hub.sendPrompt("Summarize the SLA", null);
+
+    // ...identical prompts are served straight from cache
+    SynapseResponse second = hub.sendPrompt("Summarize the SLA", null);
+}
+
+// Distributed alternative — driver supplied via RedisClientProvider SPI
+ResponseCache redis = RedisResponseCache.viaServiceLoader();`
+
+export const fallbackHubCode = `import org.abhi.synapse.core.FallbackSynapseHub;
+import org.abhi.synapse.core.ISynapseHub;
+
+ISynapseHub primary = new SynapseHub(openAiConfig);
+ISynapseHub backup  = new SynapseHub(anthropicConfig);
+
+// Try hubs in order; route around any hub that throws a SynapseException
+ISynapseHub hub = new FallbackSynapseHub(primary, backup);
+
+// The full ISynapseHub surface — calling code is unchanged
+SynapseResponse response = hub.sendPrompt(
+    "Explain the fallback semantics.", null);
+System.out.println(response.getContent());`
+
+export const loadBalancingHubCode = `import org.abhi.synapse.core.ISynapseHub;
+import org.abhi.synapse.core.LoadBalancingSynapseHub;
+
+// Same provider, different accounts / regions / API keys
+ISynapseHub hubA = new SynapseHub(configA);
+ISynapseHub hubB = new SynapseHub(configB);
+
+// Thread-safe round-robin: each call goes to the next hub
+ISynapseHub hub = new LoadBalancingSynapseHub(hubA, hubB);
+
+// Combine both patterns for distribution AND resilience
+ISynapseHub resilient =
+        new FallbackSynapseHub(
+                new LoadBalancingSynapseHub(hubA, hubB),
+                new SynapseHub(configC));`
+
+export const streamFlowCode = `import org.abhi.synapse.core.StreamFlow;
+
+// Stream a prompt, filter blanks, trim, and print each chunk
+StreamFlow.ofPrompt(hub, "Tell me a story")
+        .filter(chunk -> !chunk.isBlank())
+        .map(String::trim)
+        .forEach(chunk -> System.out.print(chunk)); // CompletableFuture<Void>
+
+// Collect the whole stream into one string
+String fullText = StreamFlow.ofPrompt(hub, "Explain qubits")
+        .join().join();
+
+// Block and unwrap SynapseExceptions for direct handling
+String lastChunk = StreamFlow.ofChat(hub, messages).blockLast();
+
+// Suppress upstream errors with a fallback element
+List<String> chunks = StreamFlow.of(publisher)
+        .onErrorReturn("(error)")
+        .toList().join();
+
+// Count elements
+long count = StreamFlow.of(publisher).count().join();`
+
+export const dynamicReconfigCode = `SynapseHub hub = new SynapseHub(config);
+
+// Individual updates — chainable, returns the same hub
+hub.updateApiKey("sk-rotated")
+   .updateDefaultModel("gpt-4o")
+   .updateBaseUrl("https://backup.example.com")
+   .updateEndpoint("/v2/chat/completions")
+   .updateRequestTimeout(Duration.ofSeconds(90))
+   .updateTemperature(0.2)
+   .updateMaxTokens(2048);
+
+// Or apply a whole new config in one shot (re-validates first)
+hub.reconfigure(newConfig);
+
+// The HttpClient pool, async executor, circuit breaker,
+// rate limiter, interceptors, and metrics are all preserved.
+// Only subsequent requests see the new values.`
+
+export const tokenProviderCode = `import org.abhi.synapse.core.TokenProvider;
+
+// Rotating token — the supplier is invoked on every request
+AtomicReference<String> token = new AtomicReference<>("current");
+
+SynapseConfig config = SynapseConfig.builder()
+        .baseUrl("https://api.openai.com")
+        .endpoint("/v1/chat/completions")
+        .tokenProvider(TokenProvider.fromSupplier(token::get))  // no apiKey needed
+        .modelName("gpt-4")
+        .build();
+
+try (SynapseHub hub = new SynapseHub(config)) {
+    hub.sendPrompt("Hi", null);   // Authorization: Bearer current
+    token.set("rotated");
+    hub.sendPrompt("Hi", null);   // Authorization: Bearer rotated
+}
+
+// Static bearer token alternative
+TokenProvider.bearer("static-token");
+
+// Custom schemes (AWS SigV4, etc.) override buildAuthorizationHeader()
+public class SigV4Provider implements TokenProvider {
+    @Override public String getToken() {
+        return signCanonicalRequest();
+    }
+    @Override public String buildAuthorizationHeader() {
+        return "AWS4-HMAC-SHA256 " + getToken();
+    }
+}`
