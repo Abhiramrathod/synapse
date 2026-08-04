@@ -36,7 +36,7 @@ final class HubSettings {
         updateFrom(config);
     }
 
-    synchronized void updateFrom(SynapseConfig config) {
+    void updateFrom(SynapseConfig config) {
         this.apiKey = config.getApiKey();
         this.tokenProvider = config.getTokenProvider();
         this.baseUrl = config.getBaseUrl();

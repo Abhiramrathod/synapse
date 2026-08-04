@@ -8,7 +8,6 @@ import org.abhi.synapse.core.model.SynapseResponse;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Base class for {@link ISynapseHub} decorators that route calls across a set
@@ -26,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public abstract class AbstractDelegatingHub implements ISynapseHub {
 
     protected final List<ISynapseHub> hubs;
-    private final AtomicInteger counter = new AtomicInteger();
 
     protected AbstractDelegatingHub(List<ISynapseHub> hubs) {
         if (hubs == null || hubs.isEmpty()) {
@@ -41,10 +39,6 @@ public abstract class AbstractDelegatingHub implements ISynapseHub {
      * @return an index into {@link #hubs}
      */
     protected abstract int nextHubIndex();
-
-    protected int roundRobin() {
-        return Math.floorMod(counter.getAndIncrement(), hubs.size());
-    }
 
     @Override
     public SynapseResponse sendPrompt(String prompt, RequestOptions options) throws SynapseException {

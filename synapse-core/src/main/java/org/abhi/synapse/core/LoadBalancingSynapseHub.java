@@ -1,6 +1,7 @@
 package org.abhi.synapse.core;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An {@link ISynapseHub} decorator that spreads load across multiple hubs using
@@ -26,6 +27,8 @@ import java.util.List;
  */
 public class LoadBalancingSynapseHub extends AbstractDelegatingHub {
 
+    private final AtomicInteger counter = new AtomicInteger();
+
     public LoadBalancingSynapseHub(ISynapseHub... hubs) {
         super(List.of(hubs));
     }
@@ -36,6 +39,6 @@ public class LoadBalancingSynapseHub extends AbstractDelegatingHub {
 
     @Override
     protected int nextHubIndex() {
-        return roundRobin();
+        return Math.floorMod(counter.getAndIncrement(), hubs.size());
     }
 }

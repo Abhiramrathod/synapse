@@ -11,7 +11,9 @@ import org.slf4j.LoggerFactory;
 
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 class SynapseStreamHandler {
 
@@ -25,109 +27,78 @@ class SynapseStreamHandler {
         this.adapter = adapter;
     }
 
-    void handle(HttpRequest request, java.util.function.Consumer<String> onChunk, boolean enableLogging)
-            throws SynapseException {
+    void handle(HttpRequest request, Consumer<String> onChunk, boolean enableLogging) throws SynapseException {
         handleWithStreamListener(request, StreamListener.of(onChunk), new CancellationToken(), enableLogging);
+    }
+
+    private void processLines(Stream<String> lines, CancellationToken token,
+                               boolean enableLogging, Consumer<String> onContent, long[] usage) {
+        lines.forEach(line -> {
+            if (token != null && token.isCancelled()) return;
+            String data = adapter.extractStreamData(line);
+            if (data == null || adapter.isStreamDone(data)) return;
+            if (adapter.isUsageChunk(data)) {
+                long[] extracted = adapter.extractStreamUsage(data);
+                if (extracted != null) { usage[0] = extracted[0]; usage[1] = extracted[1]; }
+                return;
+            }
+            try {
+                String content = adapter.extractContentFromStreamChunk(data);
+                if (!content.isEmpty()) onContent.accept(content);
+            } catch (Exception e) {
+                if (enableLogging) log.warn("[Synapse] Failed to parse stream chunk: {}", data);
+            }
+        });
     }
 
     SynapseResponse handleWithStreamListener(HttpRequest request, StreamListener listener,
                                               CancellationToken token, boolean enableLogging)
             throws SynapseException {
-        HttpResponse<java.util.stream.Stream<String>> response = httpClient.sendStreaming(request);
-
+        HttpResponse<Stream<String>> response = httpClient.sendStreaming(request);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String body = response.body().collect(Collectors.joining());
-            throw new SynapseException(response.statusCode(), body);
+            throw new SynapseException(response.statusCode(), response.body().collect(Collectors.joining()));
         }
 
-        StringBuilder accumulatedContent = new StringBuilder();
+        StringBuilder accumulated = new StringBuilder();
         long[] usage = new long[2];
         try {
-            response.body().forEach(line -> {
-                if (token != null && token.isCancelled()) {
-                    return;
-                }
-                String data = adapter.extractStreamData(line);
-                if (data == null || adapter.isStreamDone(data)) {
-                    return;
-                }
-                if (adapter.isUsageChunk(data)) {
-                    long[] extracted = adapter.extractStreamUsage(data);
-                    if (extracted != null) {
-                        usage[0] = extracted[0];
-                        usage[1] = extracted[1];
-                    }
-                    return;
-                }
-                try {
-                    String content = adapter.extractContentFromStreamChunk(data);
-                    if (!content.isEmpty()) {
-                        accumulatedContent.append(content);
-                        listener.onChunk(content);
-                    }
-                } catch (Exception e) {
-                    if (enableLogging) {
-                        log.warn("[Synapse] Failed to parse stream chunk: {}", data);
-                    }
-                }
-            });
+            processLines(response.body(), token, enableLogging, chunk -> {
+                accumulated.append(chunk);
+                listener.onChunk(chunk);
+            }, usage);
         } catch (Exception e) {
-            if (accumulatedContent.length() > 0) {
-                SynapseResponse partial = new SynapseResponse();
-                partial.setContent(accumulatedContent.toString());
-                partial.setPromptTokens((int) usage[0]);
-                partial.setCompletionTokens((int) usage[1]);
-                partial.setCorrelationId(java.util.UUID.randomUUID().toString());
+            if (accumulated.length() > 0) {
+                SynapseResponse partial = buildResponse(accumulated.toString(), usage);
                 listener.onComplete(partial);
                 return partial;
             }
-            throw new SynapseException("Streaming request failed", e,
-                    SynapseException.ExceptionType.STREAMING_ERROR);
+            throw new SynapseException("Streaming request failed", e, SynapseException.ExceptionType.STREAMING_ERROR);
         }
 
-        SynapseResponse fullResponse = new SynapseResponse();
-        fullResponse.setContent(accumulatedContent.toString());
-        fullResponse.setPromptTokens((int) usage[0]);
-        fullResponse.setCompletionTokens((int) usage[1]);
-        fullResponse.setCorrelationId(java.util.UUID.randomUUID().toString());
-        listener.onComplete(fullResponse);
-        return fullResponse;
+        SynapseResponse full = buildResponse(accumulated.toString(), usage);
+        listener.onComplete(full);
+        return full;
     }
 
     void handleAsFlow(HttpRequest request, FlowPublisher<String> publisher,
                        CancellationToken token, boolean enableLogging) throws SynapseException {
-        HttpResponse<java.util.stream.Stream<String>> response = httpClient.sendStreaming(request);
-
+        HttpResponse<Stream<String>> response = httpClient.sendStreaming(request);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String body = response.body().collect(Collectors.joining());
-            throw new SynapseException(response.statusCode(), body);
+            throw new SynapseException(response.statusCode(), response.body().collect(Collectors.joining()));
         }
-
         try {
-            response.body().forEach(line -> {
-                if (token != null && token.isCancelled()) {
-                    return;
-                }
-                String data = adapter.extractStreamData(line);
-                if (data == null || adapter.isStreamDone(data)) {
-                    return;
-                }
-                if (adapter.isUsageChunk(data)) {
-                    return;
-                }
-                try {
-                    String content = adapter.extractContentFromStreamChunk(data);
-                    if (!content.isEmpty()) {
-                        publisher.submit(content);
-                    }
-                } catch (Exception e) {
-                    if (enableLogging) {
-                        log.warn("[Synapse] Failed to parse stream chunk: {}", data);
-                    }
-                }
-            });
+            processLines(response.body(), token, enableLogging, publisher::submit, new long[2]);
         } finally {
             publisher.close();
         }
+    }
+
+    private SynapseResponse buildResponse(String content, long[] usage) {
+        SynapseResponse r = new SynapseResponse();
+        r.setContent(content);
+        r.setPromptTokens((int) usage[0]);
+        r.setCompletionTokens((int) usage[1]);
+        r.setCorrelationId(java.util.UUID.randomUUID().toString());
+        return r;
     }
 }

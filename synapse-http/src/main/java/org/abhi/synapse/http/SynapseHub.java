@@ -43,7 +43,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.function.BiConsumer;
-import java.util.function.Supplier;
 
 public class SynapseHub implements ISynapseHub, AutoCloseable {
 
@@ -275,11 +274,7 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
     @Override
     public StreamHandle streamCompletion(String requestBody, StreamListener listener) throws SynapseException {
         checkNotClosed();
-        try {
-            circuitBreaker.allowRequest();
-        } catch (SynapseException e) {
-            throw e;
-        }
+        circuitBreaker.allowRequest();
         try {
             concurrencyLimiter.acquire();
         } catch (InterruptedException e) {
@@ -359,18 +354,17 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         String baseUrl = adapter.buildModelsUrl(config.getBaseUrl());
 
         HttpRequest request = requestBuilder.buildGetRequest(baseUrl);
-        TimedResult<HttpResponse<String>> timed = executeWithTiming("Fetching models list from: " + baseUrl,
-                () -> httpClient.send(request));
-        HttpResponse<String> response = timed.value();
-        long latencyMs = System.currentTimeMillis() - timed.startTime();
-        log.debug("[Synapse] Models list fetched in {}ms with status {}", latencyMs, response.statusCode());
+        log.debug("[Synapse] Fetching models list from: {}", baseUrl);
+        long start = System.currentTimeMillis();
+        HttpResponse<String> response = httpClient.send(request);
+        log.debug("[Synapse] Models list fetched in {}ms with status {}", System.currentTimeMillis() - start, response.statusCode());
 
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            metricsCollector.recordFailure(timed.startTime());
+            metricsCollector.recordFailure(start);
             throw new SynapseException(response.statusCode(), response.body());
         }
 
-        metricsCollector.recordSuccess(timed.startTime());
+        metricsCollector.recordSuccess(start);
         return responseParser.parseModels(response.body());
     }
 
@@ -413,24 +407,24 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
             notify(config.getRequestInterceptor(), SynapseRequestInterceptor::beforeRequest, reqCtx);
 
             HttpRequest request = requestBuilder.buildPostRequest(reqCtx.getUrl(), reqCtx.getBody());
-            TimedResult<HttpResponse<String>> timed = executeWithTiming("Request to: " + url,
-                    () -> httpClient.send(request));
-            HttpResponse<String> response = timed.value();
+            log.debug("[Synapse] Request to: {}", url);
+            long start = System.currentTimeMillis();
+            HttpResponse<String> response = httpClient.send(request);
 
-            SynapseResponseContext resCtx = buildResponseContext(response, timed.startTime());
+            SynapseResponseContext resCtx = buildResponseContext(response, start);
             notify(config.getResponseInterceptor(), SynapseResponseInterceptor::beforeResponse, resCtx);
 
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 circuitBreaker.recordFailure();
                 SynapseException ex = new SynapseException(response.statusCode(), response.body());
                 notifyError(reqCtx, resCtx, ex);
-                metricsCollector.recordFailure(timed.startTime());
+                metricsCollector.recordFailure(start);
                 throw ex;
             }
 
             SynapseResponse synapseResponse = responseParser.parse(response.body());
             circuitBreaker.recordSuccess();
-            metricsCollector.recordSuccess(timed.startTime(),
+            metricsCollector.recordSuccess(start,
                     synapseResponse.getPromptTokens(), synapseResponse.getCompletionTokens());
 
             notifyComplete(reqCtx, resCtx);
@@ -491,13 +485,6 @@ public class SynapseHub implements ISynapseHub, AutoCloseable {
         if (interceptor != null) callback.accept(interceptor, target);
     }
 
-    private record TimedResult<T>(T value, long startTime) {}
-
-    private <T> TimedResult<T> executeWithTiming(String logMessage, Supplier<T> action) {
-        log.debug("[Synapse] {}", logMessage);
-        long start = System.currentTimeMillis();
-        return new TimedResult<>(action.get(), start);
-    }
 
     public SynapseMetrics getMetrics() {
         return metrics;

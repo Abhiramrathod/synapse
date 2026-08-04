@@ -32,26 +32,6 @@ public final class CaffeineResponseCache implements ResponseCache {
         this.cache = cache;
     }
 
-    /**
-     * Creates a cache bounded by the given maximum number of entries.
-     *
-     * @param maximumSize the maximum number of entries
-     * @return a size-bounded cache
-     */
-    public static CaffeineResponseCache ofMaximumSize(long maximumSize) {
-        return builder().maximumSize(maximumSize).build();
-    }
-
-    /**
-     * Creates a cache whose entries expire after the given duration.
-     *
-     * @param expireAfterWrite the time-to-live for entries
-     * @return a time-bounded cache
-     */
-    public static CaffeineResponseCache expiringAfterWrite(Duration expireAfterWrite) {
-        return builder().expireAfterWrite(expireAfterWrite).build();
-    }
-
     public static Builder builder() {
         return new Builder();
     }

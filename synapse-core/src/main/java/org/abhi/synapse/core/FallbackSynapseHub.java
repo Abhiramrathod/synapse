@@ -89,27 +89,27 @@ public class FallbackSynapseHub extends AbstractDelegatingHub {
 
     @Override
     public StreamHandle streamPrompt(String prompt, StreamListener listener) throws SynapseException {
-        return streamWithFallback(hub -> hub.streamPrompt(prompt, listener));
+        return withFallback(hub -> hub.streamPrompt(prompt, listener));
     }
 
     @Override
     public StreamHandle streamChat(List<ChatMessage> messages, StreamListener listener) throws SynapseException {
-        return streamWithFallback(hub -> hub.streamChat(messages, listener));
+        return withFallback(hub -> hub.streamChat(messages, listener));
     }
 
     @Override
     public StreamHandle streamCompletion(String requestBody, StreamListener listener) throws SynapseException {
-        return streamWithFallback(hub -> hub.streamCompletion(requestBody, listener));
+        return withFallback(hub -> hub.streamCompletion(requestBody, listener));
     }
 
     @Override
     public Flow.Publisher<String> streamChatAsFlow(List<ChatMessage> messages) throws SynapseException {
-        return flowWithFallback(hub -> hub.streamChatAsFlow(messages));
+        return withFallback(hub -> hub.streamChatAsFlow(messages));
     }
 
     @Override
     public Flow.Publisher<String> streamPromptAsFlow(String prompt) throws SynapseException {
-        return flowWithFallback(hub -> hub.streamPromptAsFlow(prompt));
+        return withFallback(hub -> hub.streamPromptAsFlow(prompt));
     }
 
     private <R> R withFallback(SynapseCall<R> call) throws SynapseException {
@@ -143,30 +143,6 @@ public class FallbackSynapseHub extends AbstractDelegatingHub {
             lastError.set(e);
             return asyncFallback(index + 1, lastError, call);
         }
-    }
-
-    private StreamHandle streamWithFallback(SynapseCall<StreamHandle> call) throws SynapseException {
-        SynapseException lastError = null;
-        for (ISynapseHub hub : hubs) {
-            try {
-                return call.call(hub);
-            } catch (SynapseException e) {
-                lastError = e;
-            }
-        }
-        throw lastError;
-    }
-
-    private Flow.Publisher<String> flowWithFallback(SynapseCall<Flow.Publisher<String>> call) throws SynapseException {
-        SynapseException lastError = null;
-        for (ISynapseHub hub : hubs) {
-            try {
-                return call.call(hub);
-            } catch (SynapseException e) {
-                lastError = e;
-            }
-        }
-        throw lastError;
     }
 
     private static Throwable unwrap(Throwable error) {
