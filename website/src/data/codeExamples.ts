@@ -189,22 +189,16 @@ export const errorHandlingCode = `try {
     }
 }`
 
-export const mavenXml = `<!-- JitPack Repository -->
-<repository>
-    <id>jitpack.io</id>
-    <url>https://jitpack.io</url>
-</repository>
-
-<!-- Pure Java (all modules) -->
+export const mavenXml = `<!-- Pure Java (all modules) -->
 <dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
+    <groupId>io.github.abhiramrathod</groupId>
     <artifactId>synapse-all</artifactId>
     <version>TAG</version>
 </dependency>
 
 <!-- Spring Boot Starter -->
 <dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
+    <groupId>io.github.abhiramrathod</groupId>
     <artifactId>synapse-spring-boot-starter</artifactId>
     <version>TAG</version>
 </dependency>`

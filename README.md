@@ -140,18 +140,13 @@ graph TD
 
 ### Maven
 
-```xml
-<repository>
-    <id>jitpack.io</id>
-    <url>https://jitpack.io</url>
-</repository>
-```
+Available on [Maven Central](https://central.sonatype.com/artifact/io.github.abhiramrathod/synapse-all).
 
 **Single dependency** — bundles all modules:
 
 ```xml
 <dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
+    <groupId>io.github.abhiramrathod</groupId>
     <artifactId>synapse-all</artifactId>
     <version>TAG</version>
 </dependency>
@@ -161,7 +156,7 @@ graph TD
 
 ```xml
 <dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
+    <groupId>io.github.abhiramrathod</groupId>
     <artifactId>synapse-spring-boot-starter</artifactId>
     <version>TAG</version>
 </dependency>
@@ -171,7 +166,7 @@ graph TD
 
 ```xml
 <dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
+    <groupId>io.github.abhiramrathod</groupId>
     <artifactId>synapse-bom</artifactId>
     <version>TAG</version>
     <type>pom</type>
@@ -184,7 +179,7 @@ graph TD
 
 ```xml
 <dependency>
-    <groupId>com.github.Abhiramrathod</groupId>
+    <groupId>io.github.abhiramrathod</groupId>
     <artifactId>synapse-cache</artifactId>
     <version>TAG</version>
 </dependency>

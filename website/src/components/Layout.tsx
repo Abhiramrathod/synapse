@@ -66,7 +66,7 @@ export default function Layout() {
                 GitHub
               </a>
               <a
-                href="https://jitpack.io/#Abhiramrathod/synapse"
+                href="https://central.sonatype.com/artifact/io.github.abhiramrathod/synapse-all"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-synapse-600 text-white hover:bg-synapse-500 transition-all"
@@ -168,8 +168,8 @@ export default function Layout() {
                   </a>
                 </li>
                 <li>
-                  <a href="https://jitpack.io/#Abhiramrathod/synapse" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-400 hover:text-synapse-400 transition-colors">
-                    JitPack
+                  <a href="https://central.sonatype.com/artifact/io.github.abhiramrathod/synapse-all" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-400 hover:text-synapse-400 transition-colors">
+                    Maven Central
                   </a>
                 </li>
                 <li>

@@ -124,15 +124,15 @@ export default function GettingStartedPage() {
             <div className="bg-gray-900/60 backdrop-blur-xl border border-gray-800/50 rounded-2xl overflow-hidden">
               <div className="p-4 border-b border-gray-800/50">
                 <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <span>Hosted on</span>
-                  <span className="text-white font-semibold">JitPack</span>
+                  <span>Available on</span>
+                  <span className="text-white font-semibold">Maven Central</span>
                   <a
-                    href="https://jitpack.io/#Abhiramrathod/synapse"
+                    href="https://central.sonatype.com/artifact/io.github.abhiramrathod/synapse-all"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-synapse-400 hover:text-synapse-300 underline underline-offset-2"
                   >
-                    View on JitPack
+                    View on Maven Central
                   </a>
                 </div>
               </div>

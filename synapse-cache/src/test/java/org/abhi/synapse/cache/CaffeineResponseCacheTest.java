@@ -14,7 +14,7 @@ class CaffeineResponseCacheTest {
 
     @Test
     void putThenGetReturnsStoredResponse() {
-        CaffeineResponseCache cache = CaffeineResponseCache.ofMaximumSize(100);
+        CaffeineResponseCache cache = CaffeineResponseCache.builder().maximumSize(100).build();
         SynapseResponse response = response("cached!");
 
         cache.put("prompt", response);
@@ -25,14 +25,14 @@ class CaffeineResponseCacheTest {
 
     @Test
     void missingKeyReturnsEmpty() {
-        CaffeineResponseCache cache = CaffeineResponseCache.ofMaximumSize(100);
+        CaffeineResponseCache cache = CaffeineResponseCache.builder().maximumSize(100).build();
 
         assertThat(cache.get("nope")).isEqualTo(Optional.empty());
     }
 
     @Test
     void evictRemovesEntry() {
-        CaffeineResponseCache cache = CaffeineResponseCache.ofMaximumSize(100);
+        CaffeineResponseCache cache = CaffeineResponseCache.builder().maximumSize(100).build();
         cache.put("key", response("v"));
 
         cache.evict("key");
@@ -42,7 +42,7 @@ class CaffeineResponseCacheTest {
 
     @Test
     void clearRemovesEveryEntry() {
-        CaffeineResponseCache cache = CaffeineResponseCache.ofMaximumSize(100);
+        CaffeineResponseCache cache = CaffeineResponseCache.builder().maximumSize(100).build();
         cache.put("a", response("1"));
         cache.put("b", response("2"));
 
@@ -54,7 +54,7 @@ class CaffeineResponseCacheTest {
 
     @Test
     void maximumSizeEvictsOldestEntries() {
-        CaffeineResponseCache cache = CaffeineResponseCache.ofMaximumSize(2);
+        CaffeineResponseCache cache = CaffeineResponseCache.builder().maximumSize(2).build();
         cache.put("a", response("1"));
         cache.put("b", response("2"));
         cache.put("c", response("3"));
@@ -67,7 +67,7 @@ class CaffeineResponseCacheTest {
 
     @Test
     void entriesExpireAfterWrite() throws Exception {
-        CaffeineResponseCache cache = CaffeineResponseCache.expiringAfterWrite(Duration.ofMillis(50));
+        CaffeineResponseCache cache = CaffeineResponseCache.builder().expireAfterWrite(Duration.ofMillis(50)).build();
         cache.put("key", response("v"));
 
         assertThat(cache.get("key")).isPresent();
