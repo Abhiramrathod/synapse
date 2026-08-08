@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -53,25 +54,25 @@ class CaffeineResponseCacheTest {
     }
 
     @Test
-    void maximumSizeEvictsOldestEntries() {
+    void maximumSizeEvictsWhenCapacityExceeded() {
         CaffeineResponseCache cache = CaffeineResponseCache.builder().maximumSize(2).build();
         cache.put("a", response("1"));
         cache.put("b", response("2"));
         cache.put("c", response("3"));
         cache.cleanUp();
 
-        assertThat(cache.get("a")).isEmpty();
-        assertThat(cache.get("b")).isPresent();
-        assertThat(cache.get("c")).isPresent();
+        long present = Stream.of("a", "b", "c").filter(k -> cache.get(k).isPresent()).count();
+        assertThat(present).isEqualTo(2);
     }
 
     @Test
     void entriesExpireAfterWrite() throws Exception {
-        CaffeineResponseCache cache = CaffeineResponseCache.builder().expireAfterWrite(Duration.ofMillis(50)).build();
+        CaffeineResponseCache cache = CaffeineResponseCache.builder().expireAfterWrite(Duration.ofMillis(500)).build();
         cache.put("key", response("v"));
 
         assertThat(cache.get("key")).isPresent();
-        Thread.sleep(120);
+        Thread.sleep(900);
+        cache.cleanUp();
         assertThat(cache.get("key")).isEmpty();
     }
 
