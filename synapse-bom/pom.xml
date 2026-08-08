@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.abhi</groupId>
+		<groupId>io.github.abhiramrathod</groupId>
 		<artifactId>synapse-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
@@ -17,47 +17,47 @@
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-core</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-interceptors</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-config</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-http</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-metrics</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-all</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-spring-boot-starter</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-test</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-cache</artifactId>
 				<version>${project.version}</version>
 			</dependency>

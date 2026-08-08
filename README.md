@@ -1,6 +1,6 @@
 # Synapse
 
-[![Maven Central](https://img.shields.io/maven-central/v/org.abhi/synapse-all)](https://central.sonatype.com/search?q=org.abhi)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.abhiramrathod/synapse-all)](https://central.sonatype.com/artifact/io.github.abhiramrathod/synapse-all)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Java 17+](https://img.shields.io/badge/Java-17+-green.svg)](https://adoptium.net/)
 

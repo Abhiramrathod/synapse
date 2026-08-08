@@ -4,7 +4,7 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.abhi</groupId>
+		<groupId>io.github.abhiramrathod</groupId>
 		<artifactId>synapse-parent</artifactId>
 		<version>0.0.1-SNAPSHOT</version>
 	</parent>
@@ -16,31 +16,31 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>org.abhi</groupId>
+			<groupId>io.github.abhiramrathod</groupId>
 			<artifactId>synapse-core</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.abhi</groupId>
+			<groupId>io.github.abhiramrathod</groupId>
 			<artifactId>synapse-interceptors</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.abhi</groupId>
+			<groupId>io.github.abhiramrathod</groupId>
 			<artifactId>synapse-config</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.abhi</groupId>
+			<groupId>io.github.abhiramrathod</groupId>
 			<artifactId>synapse-http</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.abhi</groupId>
+			<groupId>io.github.abhiramrathod</groupId>
 			<artifactId>synapse-metrics</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.abhi</groupId>
+			<groupId>io.github.abhiramrathod</groupId>
 			<artifactId>synapse-test</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.abhi</groupId>
+			<groupId>io.github.abhiramrathod</groupId>
 			<artifactId>synapse-cache</artifactId>
 		</dependency>
 		<dependency>

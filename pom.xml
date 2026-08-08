@@ -3,13 +3,44 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>org.abhi</groupId>
+	<groupId>io.github.abhiramrathod</groupId>
 	<artifactId>synapse-parent</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<packaging>pom</packaging>
 
 	<name>Synapse</name>
 	<description>Synapse - Generic LLM Client Library</description>
+	<url>https://github.com/Abhiramrathod/synapse</url>
+	<inceptionYear>2026</inceptionYear>
+
+	<licenses>
+		<license>
+			<name>Apache License, Version 2.0</name>
+			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<developers>
+		<developer>
+			<id>abhiram</id>
+			<name>Abhiram</name>
+			<email>abhiramrathod.dev@gmail.com</email>
+			<url>https://github.com/abhiram-gh</url>
+		</developer>
+	</developers>
+
+	<scm>
+		<connection>scm:git:git://github.com/Abhiramrathod/synapse.git</connection>
+		<developerConnection>scm:git:ssh://github.com:Abhiramrathod/synapse.git</developerConnection>
+		<url>https://github.com/Abhiramrathod/synapse/tree/master</url>
+		<tag>HEAD</tag>
+	</scm>
+
+	<issueManagement>
+		<system>GitHub</system>
+		<url>https://github.com/Abhiramrathod/synapse/issues</url>
+	</issueManagement>
 
 	<properties>
 		<java.version>17</java.version>
@@ -26,6 +57,12 @@
 		<okhttp.version>4.12.0</okhttp.version>
 		<assertj.version>3.27.3</assertj.version>
 		<caffeine.version>3.1.8</caffeine.version>
+
+		<!-- Central publishing (OSSRH / Maven Central) -->
+		<maven.deploy.skip>false</maven.deploy.skip>
+		<!-- The CI workflow signs artifacts with explicit GPG, so the maven-gpg-plugin
+		     (if present) is skipped to avoid plugin-invoked signing failures. -->
+		<gpg.skip>true</gpg.skip>
 	</properties>
 
 	<modules>
@@ -44,47 +81,47 @@
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-core</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-all</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-interceptors</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-config</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-http</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-metrics</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-spring-boot-starter</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-test</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>
-				<groupId>org.abhi</groupId>
+				<groupId>io.github.abhiramrathod</groupId>
 				<artifactId>synapse-cache</artifactId>
 				<version>${project.version}</version>
 			</dependency>
@@ -162,6 +199,23 @@
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
+
+	<!-- Distribution configured for Sonatype OSSRH (Maven Central). To publish,
+	     create Sonatype OSSRH credentials and configure CI to supply them as
+	     secrets (OSSRH_USERNAME and OSSRH_PASSWORD). Snapshots will be published
+	     to the snapshots repository. -->
+	<distributionManagement>
+		<repository>
+			<id>ossrh</id>
+			<name>OSSRH Staging</name>
+			<url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+		</repository>
+		<snapshotRepository>
+			<id>ossrh</id>
+			<name>OSSRH Snapshots</name>
+			<url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+		</snapshotRepository>
+	</distributionManagement>
 
 	<build>
 		<plugins>
@@ -241,6 +295,34 @@
 							<Automatic-Module-Name>${automatic.module.name}</Automatic-Module-Name>
 						</manifestEntries>
 					</archive>
+				</configuration>
+			</plugin>
+
+			<!-- Nexus staging plugin to work with Sonatype OSSRH -->
+			<plugin>
+				<groupId>org.sonatype.plugins</groupId>
+				<artifactId>nexus-staging-maven-plugin</artifactId>
+				<version>1.6.13</version>
+				<extensions>true</extensions>
+				<configuration>
+					<serverId>ossrh</serverId>
+					<!-- Nexus staging plugin expects the Nexus base URL (no path) -->
+					<nexusUrl>https://oss.sonatype.org/</nexusUrl>
+					<autoReleaseAfterClose>true</autoReleaseAfterClose>
+				</configuration>
+			</plugin>
+
+			<!-- Central publishing plugin: uploads bundle to central.sonatype.com -->
+			<plugin>
+				<groupId>org.sonatype.central</groupId>
+				<artifactId>central-publishing-maven-plugin</artifactId>
+				<version>0.11.0</version>
+				<extensions>true</extensions>
+				<configuration>
+					<!-- server id matched in settings.xml / Actions setup-java -->
+					<publishingServerId>ossrh</publishingServerId>
+					<autoPublish>true</autoPublish>
+					<waitUntil>published</waitUntil>
 				</configuration>
 			</plugin>
 		</plugins>
